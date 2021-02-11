@@ -1790,7 +1790,7 @@ def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, post
        
     x0, y0 = shapes['A'][1,:]
     x1, y1 = shapes['B'][1,:]
-    Xmin,Xmax,Ymin,Ymax = SDS_tools.get_bounding_box_minmax(shapes['A-B Mask'])
+    Xmin,Xmax,Ymin,Ymax = get_bounding_box_minmax(shapes['A-B Mask'])
     
     direction =  'XB'
     XS_o_gdf_dir = XS_o_gdf[XS_o_gdf['direction']==direction]
