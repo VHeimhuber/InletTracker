@@ -53,7 +53,10 @@ All user input files (area of interest polygon, transects & tide data) are kept 
 - It is recommended that new analysis regions/ IOCEs are added directly to the input_locations.shp file via QGIS or ArcGIS. For each site, EntranceSat expects 6 polygons as shown in this example.
 
 ![Alt text](readme_files/EntranceSat site setup illustration.jpg)
-![](readme_files/EntranceSat site setup illustration.jpg)
+
+![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/EntranceSat%20site%20setup%20illustration.jpg)
+
+readme_files/EntranceSat_method_illustration.gif
 **Note:** The area of the polygon should not exceed 100 km2
 
 
