@@ -145,8 +145,10 @@ Based on the user generate training data, the next step then is to identify the 
 After this threshold is identified, the full image series is then classified into open vs. closed entrance states and a number of output datasets are generated in a dedicated directory. These outputs include:
 
 -Location plots of the identified least cost paths:
-![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_1_mndwi_11-02-2021_L5_L7_L8_S2.png)
+![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_1_mndwi_15-02-2021_L5_L7_L8_S2.png)
+-Spectral Transect plots:
+![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_2_mndwi_15-02-2021_L5_L7_L8_S2.png)
 -Time series plots of the delta to median parameter:
-![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_2_mndwi_11-02-2021_L5_L7_L8_S2.png)
+![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_3_mndwi_15-02-2021_L5_L7_L8_S2.png)
 -CSV files with all the processed data.
 -Shapefile containing all of the least-cost paths corresponding to open entrances.
