@@ -21,13 +21,13 @@ from sklearn.metrics import confusion_matrix
 # other modules
 from matplotlib import gridspec
 from matplotlib.pyplot import cm
+import matplotlib.image as mpimg
 import matplotlib
 import pickle
 import geopandas as gpd
 import pandas as pd
 import random
-
-
+import glob
 
 import seaborn
 from shapely import geometry
@@ -41,6 +41,7 @@ import re
 from coastsat import SDS_tools, SDS_preprocess
 
 np.seterr(all='ignore') # raise/ignore divisions by 0 and nans
+
 
 
 ###################################################################################################
@@ -425,11 +426,11 @@ def create_training_data(metadata, settings, settings_training):
                     continue
                 
                 #load boundary shapefiles for each scene and reproject according to satellite image epsg  
-                shapes = SDS_tools.load_shapes_as_ndarrays_2(settings['inputs']['location_shps']['layer'].values, settings['inputs']['location_shps'], satname, sitename, settings['shapefile_EPSG'],
+                shapes = load_shapes_as_ndarrays(settings['inputs']['location_shps']['layer'].values, settings['inputs']['location_shps'], satname, sitename, settings['shapefile_EPSG'],
                                georef, metadata, epsg_dict[filenames[i]] ) 
                          
                 #get the min and max corner (in pixel coordinates) of the entrance area that will be used for plotting the data for visual inspection
-                Xmin,Xmax,Ymin,Ymax = SDS_tools.get_bounding_box_minmax(shapes['A-B Mask'])      
+                Xmin,Xmax,Ymin,Ymax = get_bounding_box_minmax(shapes['A-B Mask'])      
                     
                 #Manually check entrance state to generate training data
                 if settings_training['save_figure']:
@@ -1423,173 +1424,20 @@ def bestThreshold(y_true,y_pred):
             best_score = score
     return best_score , Accuracy, tn, fp, fn, tp, best_thresh
  
-    
  
-def setup_classification_df(XS_df, Training_data_df,postprocess_params):   
+def calculateDeltaToMedian(XS_df, postprocess_params, calc_direction):
+    #this function creates a dataframe that has a date timeseries index and the delta-to-median parameter as values
     
-    #Divide processed data into open and closed 
-    XS_o_df = pd.DataFrame()
-    #XS_o_gdf = pd.DataFrame()
-    for date in Training_data_df[Training_data_df['Entrance_state'] == 'open'].index:
-        XS_o_df = pd.concat([XS_o_df, pd.DataFrame(pd.DataFrame(XS_df.filter(regex=date)))], axis = 1)
-        #satnameforloop = Training_data_df['satname'][Training_data_df.index == date] #this needed to be done since the date[:10] filter wasn't fully accurate (i.e. when say S2 and L8 were aquired on the same day, both get chosen)  
-        #XS_o_df = pd.concat([XS_o_df, pd.DataFrame(pd.DataFrame(XS_df.filter(regex=date)).filter(regex='_' + satnameforloop[0] + '_'))], axis = 1)
-        
-        #XS_o_gdf = pd.concat([XS_o_gdf, XS_gdf[XS_gdf['date'] == date]], axis = 0)
-    
-    #write open across-berm transects out as shapefile for visualization
-    #XS_o_gdf[XS_o_gdf['direction']=='XB'].to_file(csv_out_path  + '/open_AB_lines.shp', driver='ESRI Shapefile')     
-    
-    XS_c_df = pd.DataFrame()
-    #XS_c_gdf = pd.DataFrame()
-    for date in Training_data_df[Training_data_df['Entrance_state'] == 'closed'].index:
-        XS_c_df = pd.concat([XS_c_df, pd.DataFrame(XS_df.filter(regex=date))], axis = 1)
-        # satnameforloop = Training_data_df['satname'][Training_data_df.index == date] #this needed to be done since the date[:10] filter wasn't fully accurate (i.e. when say S2 and L8 were aquired on the same day, both get chosen)   
-        # XS_c_df = pd.concat([XS_c_df, pd.DataFrame(XS_df.filter(regex=date).filter(regex='_' + satnameforloop[0] + '_'))], axis = 1)
-                
-        #XS_c_df =  XS_c_df.append(XS_df.filter(regex=date[:10]), ignore_index=True)
-        #XS_c_df = pd.concat([XS_c_df, pd.DataFrame(XS_df.filter(regex=date[:10]))], axis = 1)
-        #XS_c_gdf = pd.concat([XS_c_gdf, XS_gdf[XS_gdf['date'] == date]], axis = 0)
-    
-    
-    directions = ['AB', 'XB']
-    XBAB_XS_c_sums_df = pd.DataFrame()
-    for direction in directions:
-        #create a new dataframe that has a data timeseries index and the delta between the max of the XB transect and the ~50 percentile of the AB transect
-        df2 = XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + direction).dropna()
-        df2b = XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna().max()  
-        df4 = pd.DataFrame(XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_AB_').dropna().quantile(q=postprocess_params['metric_percentile'],
-                              axis=0, numeric_only=True, interpolation='linear'))
-              
-        #keep only columns in df2 if they are also in df2b
-        dfintm = XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna()
-        newindex = []
-        for index in df2.columns:
-            newindex.append(index[:19])
-        df2.columns = newindex 
-        newindex = []
-        for index in df4.index:
-            newindex.append(index[:19])
-        df4.index = newindex     
-        newindex = []
-        for index in dfintm.columns:
-            newindex.append(index[:19])
-        dfintm.columns = newindex 
-        
-        df2 = df2[dfintm.columns]
-        df4 = df4.ix[dfintm.columns]
-        
-        newindex = []
-        for index in df2b.index:
-            newindex.append(index[:19])
-        df2b.index = newindex    
-        df2_dict = {}
-        for XScolname in df2.columns:
-            intersection = df2b[XScolname[:19]]       
-            if not isinstance(intersection, float):
-                intersection = intersection.iloc[0]
-            if direction == 'AB':
-                df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['AB_intersection_search_distance']),0) : np.int(intersection + postprocess_params['AB_intersection_search_distance'] )].min()         
-            else: 
-                df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['XB_intersection_search_distance']),0) : np.int(intersection + postprocess_params['XB_intersection_search_distance'] )].min()         
-            
-        df3 = pd.DataFrame.from_dict(df2_dict,  orient='index')        
-        
-        
-        newindex = []
-        for index in df4.index:
-            newindex.append(pd.to_datetime(index[:19], format = '%Y-%m-%d-%H-%M-%S'))
-        df3.index = newindex
-        df4.index = newindex
-        df5 = pd.concat([ df3,  df4], axis = 1, join='outer')
-        df5.columns = ['maxindex','ABpercent']
-        XS_c_sums_df = df5['ABpercent'] - df5['maxindex'] 
-        
-        
-        XS_c_sums_df.columns = direction
-        XBAB_XS_c_sums_df = pd.concat([ XBAB_XS_c_sums_df,  XS_c_sums_df ], axis = 1, join='outer')
-    
-    XBAB_XS_c_sums_df.columns = ['Along_berm_DTM', 'Across_berm_DTM']
-    XBAB_XS_c_sums_df['user_entrance_state'] = 0
-    
-    
-    directions = ['AB', 'XB']
-    XBAB_XS_o_sums_df = pd.DataFrame()
-    for direction in directions:
-        #create a new dataframe that has a data timeseries index and the delta between the max of the XB transect and the ~50 percentile of the AB transect
-        df2 = XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + direction).dropna()
-        df2b = XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna().max()  
-        df4 = pd.DataFrame(XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_AB_').dropna().quantile(q=postprocess_params['metric_percentile'],
-                              axis=0, numeric_only=True, interpolation='linear'))       
-              
-        #keep only columns in df2 if they are also in df2b
-        dfintm = XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna()
-        newindex = []
-        for index in df2.columns:
-            newindex.append(index[:19])
-        df2.columns = newindex 
-        newindex = []
-        for index in df4.index:
-            newindex.append(index[:19])
-        df4.index = newindex     
-        newindex = []
-        for index in dfintm.columns:
-            newindex.append(index[:19])
-        dfintm.columns = newindex 
-        
-        df2 = df2[dfintm.columns]
-        df4 = df4.ix[dfintm.columns]
-        
-        newindex = []
-        for index in df2b.index:
-            newindex.append(index[:19])
-        df2b.index = newindex    
-        df2_dict = {}
-        for XScolname in df2.columns:
-            intersection = df2b[XScolname[:19]]       
-            if not isinstance(intersection, float):
-                intersection = intersection.iloc[0]
-            if direction == 'AB':
-                df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['AB_intersection_search_distance']),0) : np.int(intersection + postprocess_params['AB_intersection_search_distance'] )].min()         
-            else: 
-                df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['XB_intersection_search_distance']),0) : np.int(intersection + postprocess_params['XB_intersection_search_distance'] )].min()         
-            
-            
-        df3 = pd.DataFrame.from_dict(df2_dict,  orient='index')        
-        
-        newindex = []
-        for index in df4.index:
-            newindex.append(pd.to_datetime(index[:19], format = '%Y-%m-%d-%H-%M-%S'))
-        df3.index = newindex
-        df4.index = newindex
-        df5 = pd.concat([ df3,  df4], axis = 1, join='outer')
-        df5.columns = ['maxindex','ABpercent']
-        XS_o_sums_df = df5['ABpercent'] - df5['maxindex'] 
-         
-        XS_o_sums_df.columns = direction
-        XBAB_XS_o_sums_df = pd.concat([ XBAB_XS_o_sums_df,  XS_o_sums_df ], axis = 1, join='outer')
-    
-    XBAB_XS_o_sums_df.columns = ['Along_berm_DTM', 'Across_berm_DTM']
-    XBAB_XS_o_sums_df['user_entrance_state'] = 1
-
-    Classification_df = pd.DataFrame(pd.concat([XBAB_XS_o_sums_df, XBAB_XS_c_sums_df], axis = 0))
-    Classification_df = Classification_df.dropna()
-    
-    return Classification_df
- 
-
-def classify_image_series_via_DTM(XS_df, direction, DTM_threshold, postprocess_params):
- 
-    #classify the full processed image series into open vs. closed binary entrance states
-        
-    #create a new dataframe that has a data timeseries index and the delta between the max of the XB transect and the ~50 percentile of the AB transect
-    df2 = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + direction).dropna()
-    df2b = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna().max()  
-    df4 = pd.DataFrame(XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_AB_').dropna().quantile(q=postprocess_params['metric_percentile'] ,
+    #subset the full result dataframe to the spectral index desired for analysis and also either AB or XB analysis direction
+    df2 = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + calc_direction).dropna()
+    #create dataframe with the distance to the intersection for each time step
+    df2b = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + calc_direction).dropna().max()  
+    #create dataframe of delta-to-median for each time step
+    df4 = pd.DataFrame(XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_AB_').dropna().quantile(q=postprocess_params['metric_percentile'],
                           axis=0, numeric_only=True, interpolation='linear'))
           
-    #keep only columns in df2 if they are also in df2b
-    dfintm = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna()
+    #to do calculations across the various dataframes, here, the indices are normalized to only the 'date' component. 
+    dfintm = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + calc_direction).dropna()
     newindex = []
     for index in df2.columns:
         newindex.append(index[:19])
@@ -1602,39 +1450,80 @@ def classify_image_series_via_DTM(XS_df, direction, DTM_threshold, postprocess_p
     for index in dfintm.columns:
         newindex.append(index[:19])
     dfintm.columns = newindex 
-    
-    df2 = df2[dfintm.columns]
-    df4 = df4.ix[dfintm.columns]
-    
     newindex = []
     for index in df2b.index:
         newindex.append(index[:19])
-    df2b.index = newindex    
+    df2b.index = newindex   
+ 
+    #keep only columns in df2 if they are also in df2b - this is necessary since sometimes, no intersection is found. 
+    df2 = df2[dfintm.columns]
+    df4 = df4.loc[dfintm.columns]
+ 
+    #find the local maximum or minimum in the vicinity of the AB and XB intersection. 
     df2_dict = {}
     for XScolname in df2.columns:
         intersection = df2b[XScolname[:19]]       
         if not isinstance(intersection, float):
             intersection = intersection.iloc[0]
-        if direction == 'AB':
+        if calc_direction == 'AB':
             df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['AB_intersection_search_distance']),0) : np.int(intersection + postprocess_params['AB_intersection_search_distance'] )].min()         
-        else: 
-            df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['XB_intersection_search_distance']),0) : np.int(intersection + postprocess_params['XB_intersection_search_distance'] )].min()         
-        
-        
-    df3 = pd.DataFrame.from_dict(df2_dict,  orient='index')        
-     
+        if calc_direction == 'XB':
+            df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['XB_intersection_search_distance']),0) : np.int(intersection + postprocess_params['XB_intersection_search_distance'] )].max()               
+    df3 = pd.DataFrame.from_dict(df2_dict,  orient='index')          
+    
     newindex = []
     for index in df4.index:
         newindex.append(pd.to_datetime(index[:19], format = '%Y-%m-%d-%H-%M-%S'))
     df3.index = newindex
     df4.index = newindex
-    df5 = pd.concat([ df3,  df4], axis = 1, join='outer')
+    df5 = pd.concat([df3,  df4], axis = 1, join='outer')
     df5.columns = ['maxindex','ABpercent']
-    XS_sums_df = df5['ABpercent'] - df5['maxindex']
+    XS_sums_df = df5['ABpercent'] - df5['maxindex'] 
     
-    XS_sums_df= pd.DataFrame(XS_sums_df)
+    XS_sums_df.columns = calc_direction   
+    return XS_sums_df
+    
 
-    if direction == 'AB':
+def setup_classification_df(XS_df, Training_data_df,postprocess_params):   
+    
+    #Divide processed data into open and closed 
+    XS_o_df = pd.DataFrame()
+    for date in Training_data_df[Training_data_df['Entrance_state'] == 'open'].index:
+        XS_o_df = pd.concat([XS_o_df, pd.DataFrame(XS_df.filter(regex=date))], axis = 1)
+    
+    XS_c_df = pd.DataFrame()
+    for date in Training_data_df[Training_data_df['Entrance_state'] == 'closed'].index:
+        XS_c_df = pd.concat([XS_c_df, pd.DataFrame(XS_df.filter(regex=date))], axis = 1)
+    
+    #calculate the delta-to-median parameter for all open and closed 'images'
+    XBAB_XS_c_sums_df = pd.DataFrame()
+    AB_sums_df = calculateDeltaToMedian(XS_c_df, postprocess_params, 'AB')
+    XB_sums_df = calculateDeltaToMedian(XS_c_df, postprocess_params, 'XB')    
+    XBAB_XS_c_sums_df = pd.concat([AB_sums_df,  XB_sums_df ], axis = 1, join='outer')   
+    XBAB_XS_c_sums_df.columns = ['Along_berm_DTM', 'Across_berm_DTM']
+    XBAB_XS_c_sums_df['user_entrance_state'] = 0
+      
+    XBAB_XS_o_sums_df = pd.DataFrame()
+    AB_sums_df = calculateDeltaToMedian(XS_o_df, postprocess_params, 'AB')
+    XB_sums_df = calculateDeltaToMedian(XS_o_df, postprocess_params, 'XB')   
+    XBAB_XS_o_sums_df = pd.concat([AB_sums_df,  XB_sums_df ], axis = 1, join='outer')     
+    XBAB_XS_o_sums_df.columns = ['Along_berm_DTM', 'Across_berm_DTM']
+    XBAB_XS_o_sums_df['user_entrance_state'] = 1
+
+    #combine open and closed dataframes into a single data frame and return
+    Classification_df = pd.DataFrame(pd.concat([XBAB_XS_o_sums_df, XBAB_XS_c_sums_df], axis = 0))
+    Classification_df = Classification_df.dropna()
+    
+    return Classification_df
+
+
+def classify_image_series_via_DTM(XS_df, analysis_direction, DTM_threshold, postprocess_params):
+ 
+    #classify the full processed image series into open vs. closed binary entrance states
+    XS_sums_df = pd.DataFrame(calculateDeltaToMedian(XS_df, postprocess_params, analysis_direction)).dropna()
+    
+    #classify the delta-to-median parameter into binary entrance states [o=closed, 1=open]
+    if analysis_direction == 'AB':
         XS_sums_df.columns = ['Along_berm_DTM']
         XS_sums_df['bin_entrance_state'] = 0
         XS_sums_df['bin_entrance_state'][XS_sums_df['Along_berm_DTM'] > DTM_threshold] = 1
@@ -1643,6 +1532,7 @@ def classify_image_series_via_DTM(XS_df, direction, DTM_threshold, postprocess_p
         XS_sums_df['bin_entrance_state'] = 0
         XS_sums_df['bin_entrance_state'][XS_sums_df['Across_berm_DTM'] > DTM_threshold] = 1
     
+    #reconstruct the dataframe index in the original form to comply with the rest of the code
     newindex = []
     for index in XS_sums_df.index:
         date = str(index)
@@ -1654,6 +1544,104 @@ def classify_image_series_via_DTM(XS_df, direction, DTM_threshold, postprocess_p
     return XS_sums_df
 
 
+def show_detection(postprocess_out_path, date, entrance_state_str): 
+                     
+    skip_image = False
+    
+    img1  =  glob.glob(postprocess_out_path +  '/auto_transects/' +  date  +  '*.png' )[0]
+    img = mpimg.imread(img1)
+    
+    #plt.close('all') 
+    
+    #get current figure
+    if plt.get_fignums():
+        fig = plt.gcf()
+    
+    else:
+        fig = plt.figure()
+        mng = plt.get_current_fig_manager()
+        mng.window.showMaximized()
+    
+    plt.imshow(img)
+    plt.axis('off')
+    
+    plt.text(2000, 90, entrance_state_str, size=20, ha="center", va="top",
+                        #transform=ax1.transAxes,
+                        bbox=dict(boxstyle="square", ec='k',fc='w'))
+    
+    key_event = {}
+    def press(event):
+        # store what key was pressed in the dictionary
+        key_event['pressed'] = event.key
+        
+    # let the user press a key, right arrow to keep the image, left arrow to skip it
+    # to break the loop the user can press 'escape'
+    while True:
+        btn_keep = plt.text(3950,50, 'keep ⇨', size=20, ha="right", va="top",
+                            #transform=ax1.transAxes,
+                            bbox=dict(boxstyle="square", ec='k',fc='w'))
+        btn_skip = plt.text(50, 50, '⇦ skip', size=20, ha="left", va="top",
+                            #transform=ax1.transAxes,
+                            bbox=dict(boxstyle="square", ec='k',fc='w'))
+        btn_esc = plt.text(2000,-30, '<esc> to quit', size=12, ha="center", va="top",
+                            #transform=ax1.transAxes,
+                            bbox=dict(boxstyle="square", ec='k',fc='w'))
+        plt.draw()
+        fig.canvas.mpl_connect('key_press_event', press)
+        plt.waitforbuttonpress()
+        # after button is pressed, remove the buttons
+        btn_skip.remove()
+        btn_keep.remove()
+        btn_esc.remove()
+        
+        # keep/skip image according to the pressed key, 'escape' to break the loop
+        if key_event.get('pressed') == 'right':
+            skip_image = False
+            break
+        elif key_event.get('pressed') == 'left':
+            skip_image = True
+            break
+        elif key_event.get('pressed') == 'escape':
+            plt.close()
+            raise StopIteration('User cancelled checking shoreline detection')
+        else:
+            plt.waitforbuttonpress()
+      
+        
+    # Don't close the figure window, but remove all axes and settings, ready for next plot
+    for ax in fig.axes:
+        ax.clear()
+    
+    return skip_image   
+
+
+
+
+def check_entrance_state_detection(postprocess_out_path, XS_DTM_classified_df): 
+
+    # initialise output data as dict
+    XS_DTM_clfd_quality_contrd={}
+    
+    for date in XS_DTM_classified_df.index:
+        entrance_state = XS_DTM_classified_df[XS_DTM_classified_df.index==date]['bin_entrance_state'][0]
+        if entrance_state == 0:
+            entrance_state_str = 'closed'
+        else:
+            entrance_state_str = 'open'
+    
+        #show the detected entrance state and prompt user input. 
+        skip_img = show_detection(postprocess_out_path, date, entrance_state_str)
+        
+        #keep image if skip_img is not true based on user-input       
+        if not skip_img:
+
+            XS_DTM_clfd_quality_contrd[date] =   entrance_state
+      
+    plt.close('all') 
+    XS_DTM_clfd_quality_contrd_df = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in XS_DTM_clfd_quality_contrd.items() ])).transpose()
+    XS_DTM_clfd_quality_contrd_df.columns = ['Entrance_state']
+    
+    return XS_DTM_clfd_quality_contrd_df
 
 
 def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, postprocess_params, metadata,  figure_out_path):
@@ -1730,7 +1718,7 @@ def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, post
         df2 = df2.drop(columns=2)  
         pts_pix_interp = SDS_tools.convert_world2pix(df2.values, georef)
         c= next(color)
-        ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], linestyle = postprocess_params['linestyle'][0],lw=postprocess_params['linewidth'], color=c)
+        ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], linestyle = postprocess_params['linestyle'][0],lw=0.5, color=c)
         ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko',   color=c)
         ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=c)  
         if i==0:
@@ -1769,7 +1757,7 @@ def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, post
             plt.text(pts_pix_interp[-1,0]+3, pts_pix_interp[-1,1]+3,'D',horizontalalignment='left', color=postprocess_params['closed_color'], fontsize=postprocess_params['labelsize'])
     
     ####################################
-    #Plot the open entrance states
+    # Plot the open entrance states
     #################################### 
             
     # row 1 pos 2   ################################################################################         
@@ -1855,286 +1843,114 @@ def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, post
     
     fig.tight_layout()   
     fig.savefig(os.path.join(figure_out_path,'Figure_1_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + postprocess_params['satnames_string'] + '.png'), dpi=400)          
-    plt.close()
+    plt.close()  
     
     
     
-    
-    
-    #plot the mNDWI transects & delta-to-median parameter ################################################################################      
+    ################################################################################  
+    #plot the mNDWI transects & delta-to-median parameter  
+    ################################################################################  
     
     fig = plt.figure(figsize=(12,14))  
     print('plotting Figure 2')
     
+    #plot the AB transects
     direction =  'AB'  
     ax=plt.subplot(4,1,1)      
-    XS_c_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).dropna().plot(color=postprocess_params['closed_color'], linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.5, ax=ax)
-    XS_o_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).dropna().plot(color=postprocess_params['open_color'],  linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.5,ax=ax)
-    
-    plt.ylim(-0.9,0.9)
-    #plt.title('postprocess_params['spectral_index'] + ' along transects') 
-    #plt.legend()
+    XS_o_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+                direction).dropna().plot(color=postprocess_params['open_color'],  linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.3,ax=ax)
+    plt.ylim(-1,0.7)
+    plt.xlim(left=0)
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
-    plt.text(1,0,'C',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
-    plt.xlabel('Distance along along-berm transects [m]')
-    plt.ylabel(postprocess_params['spectral_index'])
+    #plt.text(1,0,'C',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
+    plt.xlabel('Distance along along-berm (C-D) transects [m]')
+    plt.ylabel(postprocess_params['spectral_index'] + ' (open entrances)')
     ax.get_legend().remove()  
     
+    ax=plt.subplot(4,1,2)      
+    XS_c_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+                direction).dropna().plot(color=postprocess_params['closed_color'], linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.3, ax=ax)
+    plt.ylim(-1,0.7)
+    plt.xlim(left=0)
+    plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
+    #plt.text(1,0,'C',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
+    plt.xlabel('Distance along along-berm (C-D) transects [m]')
+    plt.ylabel(postprocess_params['spectral_index'] + ' (closed entrances)')
+    ax.get_legend().remove()     
+             
+    #plot the XB transects
+    direction =  'XB'     
+    ax=plt.subplot(4,1,3)
+    XS_o_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+                direction).dropna().plot(color=postprocess_params['open_color'],  linestyle= postprocess_params['linestyle'][0],lw=1.5,alpha=0.3,ax=ax)    
+    plt.ylim(-1,0.7)
+    plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
+    #plt.text(1,0,'A',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
+    plt.xlabel('Distance along across-berm (A-B) transects [m]')
+    plt.ylabel(postprocess_params['spectral_index'] + ' (open entrances)')
+    ax.get_legend().remove() 
     
-    # row 2 pos 2  ################################################################################   
-    #plot the mNDWI sums along the transects over time
-    ax=plt.subplot(4,1,3)  
+    ax=plt.subplot(4,1,4)
+    XS_c_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+                direction).dropna().plot(color=postprocess_params['closed_color'], linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.3, ax=ax)
+    plt.ylim(-1,0.7)
+    plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
+    #plt.text(1,0,'A',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
+    plt.xlabel('Distance along across-berm (A-B) transects [m]')
+    plt.ylabel(postprocess_params['spectral_index'] + ' (closed entrances)')
+    ax.get_legend().remove() 
+    
+    fig.tight_layout()   
+    fig.savefig(os.path.join(figure_out_path,'Figure_2_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + postprocess_params['satnames_string'] + '.png'), dpi=400)          
+    plt.close()   
     
     
-    #create a new dataframe that has a data timeseries index and the delta between the max of the XB transect and the ~50 percentile of the AB transect
-    df2 = XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + direction).dropna()
-    df2b = XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna().max()  
-    df4 = pd.DataFrame(XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_AB_').dropna().quantile(q=postprocess_params['metric_percentile'] ,
-                          axis=0, numeric_only=True, interpolation='linear'))
-          
-    #keep only columns in df2 if they are also in df2b
-    dfintm = XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna()
-    newindex = []
-    for index in df2.columns:
-        newindex.append(index[:19])
-    df2.columns = newindex 
-    newindex = []
-    for index in df4.index:
-        newindex.append(index[:19])
-    df4.index = newindex     
-    newindex = []
-    for index in dfintm.columns:
-        newindex.append(index[:19])
-    dfintm.columns = newindex 
+    ################################################################################  
+    #plot the delta-to-median time series and group by open vs. closed via color coding
+    ################################################################################  
     
-    df2 = df2[dfintm.columns]
-    df4 = df4.ix[dfintm.columns]
-    
-    newindex = []
-    for index in df2b.index:
-        newindex.append(index[:19])
-    df2b.index = newindex    
-    df2_dict = {}
-    for XScolname in df2.columns:
-        intersection = df2b[XScolname[:19]]       
-        if not isinstance(intersection, float):
-            intersection = intersection.iloc[0]
-        df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['AB_intersection_search_distance']),0) : np.int(intersection +  postprocess_params['AB_intersection_search_distance'])].min()         
-    df3 = pd.DataFrame.from_dict(df2_dict,  orient='index')        
-    
-    newindex = []
-    for index in df4.index:
-        newindex.append(pd.to_datetime(index[:19], format = '%Y-%m-%d-%H-%M-%S'))
-    df3.index = newindex
-    df4.index = newindex
-    df5 = pd.concat([ df3,  df4], axis = 1, join='outer')
-    df5.columns = ['maxindex','ABpercent']
-    XS_c_sums_df = df5['ABpercent'] - df5['maxindex'] 
-        
+    fig = plt.figure(figsize=(12,7))  
+    print('plotting Figure 3')       
+
+    #plot along berm 
+    direction =  'AB' 
       
-    newindex = []
-    for index in XS_c_sums_df.index:
-        newindex.append(pd.to_datetime(index, format = '%Y-%m-%d-%H-%M-%S'))
-    XS_c_sums_df.index = newindex
-    
-    XS_c_sums_df = pd.DataFrame(XS_c_sums_df)
-    
-    
-    
-    #create a new dataframe that has a data timeseries index and the delta between the max of the XB transect and the ~50 percentile of the AB transect
-    df2 = XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + direction).dropna()
-    df2b = XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna().max()  
-    df4 = pd.DataFrame(XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_AB_').dropna().quantile(q=postprocess_params['metric_percentile'] ,
-                          axis=0, numeric_only=True, interpolation='linear'))   
-         
-    #keep only columns in df2 if they are also in df2b
-    dfintm = XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna()
-    newindex = []
-    for index in df2.columns:
-        newindex.append(index[:19])
-    df2.columns = newindex 
-    newindex = []
-    for index in df4.index:
-        newindex.append(index[:19])
-    df4.index = newindex     
-    newindex = []
-    for index in dfintm.columns:
-        newindex.append(index[:19])
-    dfintm.columns = newindex 
-    
-    df2 = df2[dfintm.columns]
-    df4 = df4.ix[dfintm.columns]
-    
-    newindex = []
-    for index in df2b.index:
-        newindex.append(index[:19])
-    df2b.index = newindex 
-    df2_dict = {}
-    for XScolname in df2.columns:
-        intersection = df2b[XScolname[:19]]       
-        if not isinstance(intersection, float):
-            intersection = intersection.iloc[0]
-        df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['AB_intersection_search_distance']),0) : np.int(intersection + postprocess_params['AB_intersection_search_distance'])].min()  
-    df3 = pd.DataFrame.from_dict(df2_dict,  orient='index')  
-    
-    newindex = []
-    for index in df4.index:
-        newindex.append(pd.to_datetime(index[:19], format = '%Y-%m-%d-%H-%M-%S'))
-    df3.index = newindex
-    df4.index = newindex
-    df5 = pd.concat([ df3,  df4], axis = 1, join='outer')
-    df5.columns = ['maxindex','ABpercent']
-    XS_o_sums_df = df5['ABpercent'] - df5['maxindex']   
-    
-    newindex = []
-    for index in XS_o_sums_df.index:
-        newindex.append(pd.to_datetime(index, format = '%Y-%m-%d-%H-%M-%S'))
-        
-    XS_o_sums_df.index = newindex
-    XS_o_sums_df = pd.DataFrame(XS_o_sums_df)
-    
-    XS_c_sums_AB_df = XS_c_sums_df
-    XS_o_sums_AB_df = XS_o_sums_df
-    
+    XS_c_sums_AB_df = pd.DataFrame(calculateDeltaToMedian(XS_c_df, postprocess_params, direction))   
+    XS_o_sums_AB_df = pd.DataFrame(calculateDeltaToMedian(XS_o_df, postprocess_params, direction))    
     XS_co_sums_AB_df = XS_c_sums_AB_df.append(XS_o_sums_AB_df )
-    XS_co_sums_AB_df.plot(color='grey', style='--',lw=1, alpha=0.5, ax=ax)
     
-    XS_c_sums_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],  ax=ax)
-    XS_o_sums_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)
-        
-    plt.ylim(XS_c_sums_df.min().min(),XS_o_sums_df.max().max())
+    ax=plt.subplot(2,1,1)  
+    XS_co_sums_AB_df.plot(color='grey', style='--',lw=1.2, alpha=0.8, ax=ax) 
+    XS_c_sums_AB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],   ax=ax)
+    XS_o_sums_AB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)       
+    plt.ylim(-0.1,XS_o_sums_AB_df.max().max())
     plt.ylabel('Along-berm Delta-to-median')
     ax.get_legend().remove()  
     
-    
-    # row 3 pos 1  ################################################################################                   
-    #plot the mNDWI transects
-    direction =  'XB'     
-    ax=plt.subplot(4,1,2)
-    XS_c_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).dropna().plot(color=postprocess_params['closed_color'], linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.5, ax=ax)
-    XS_o_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).dropna().plot(color=postprocess_params['open_color'],  linestyle= postprocess_params['linestyle'][0],lw=1.5,alpha=0.5,ax=ax)
-    
-    plt.ylim(-0.9,0.9)
-    plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
-    plt.text(1,0,'A',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
-    plt.xlabel('Distance along across-berm transects [m]')
-    plt.ylabel(postprocess_params['spectral_index'])
-    ax.get_legend().remove()  
-    
-    
-    # row 2 pos 2  ################################################################################   
-    ax=plt.subplot(4,1,4)
-    #XB_intersection_search_distance = 300
-    #plot the mNDWI sums along the transects over time
-        
-    #create a new dataframe that has a data timeseries index and the delta between the max of the XB transect and the ~50 percentile of the AB transect
-    df2 = XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + direction).dropna()
-    df2b = XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna().max()  
-    df4 = pd.DataFrame(XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_AB_').dropna().quantile(q=postprocess_params['metric_percentile'] ,
-                          axis=0, numeric_only=True, interpolation='linear'))
-          
-    #keep only columns in df2 if they are also in df2b
-    dfintm = XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna()
-    newindex = []
-    for index in df2.columns:
-        newindex.append(index[:19])
-    df2.columns = newindex 
-    newindex = []
-    for index in df4.index:
-        newindex.append(index[:19])
-    df4.index = newindex     
-    newindex = []
-    for index in dfintm.columns:
-        newindex.append(index[:19])
-    dfintm.columns = newindex 
-    
-    df2 = df2[dfintm.columns]
-    df4 = df4.ix[dfintm.columns]
-    
-    newindex = []
-    for index in df2b.index:
-        newindex.append(index[:19])
-    df2b.index = newindex    
-    df2_dict = {}
-    for XScolname in df2.columns:
-        #XScolname = '2014-08-11'
-        intersection = df2b[XScolname[:19]]       
-        if not isinstance(intersection, float):
-            intersection = intersection.iloc[0]
-        df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['XB_intersection_search_distance']),0): np.int(intersection + postprocess_params['XB_intersection_search_distance'])].max()          
-    df3 = pd.DataFrame.from_dict(df2_dict,  orient='index')        
-    
-    newindex = []
-    for index in df4.index:
-        newindex.append(pd.to_datetime(index[:19], format = '%Y-%m-%d-%H-%M-%S'))
-    df3.index = newindex
-    df4.index = newindex
-    df5 = pd.concat([ df3,  df4], axis = 1, join='outer')
-    df5.columns = ['maxindex','ABpercent']
-    XS_c_sums_df = df5['ABpercent'] - df5['maxindex']  
-    
-    
-    #create a new dataframe that has a data timeseries index and the delta between the max of the XB transect and the ~50 percentile of the AB transect
-    df2 = XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + direction).dropna()
-    df2b = XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna().max()  
-    df4 = pd.DataFrame(XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_AB_').dropna().quantile(q= postprocess_params['metric_percentile'],
-                          axis=0, numeric_only=True, interpolation='linear'))
-          
-    #keep only columns in df2 if they are also in df2b
-    dfintm = XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + direction).dropna()
-    newindex = []
-    for index in df2.columns:
-        newindex.append(index[:19])
-    df2.columns = newindex 
-    newindex = []
-    for index in df4.index:
-        newindex.append(index[:19])
-    df4.index = newindex     
-    newindex = []
-    for index in dfintm.columns:
-        newindex.append(index[:19])
-    dfintm.columns = newindex 
-    
-    df2 = df2[dfintm.columns]
-    df4 = df4.ix[dfintm.columns]
-    
-    newindex = []
-    for index in df2b.index:
-        newindex.append(index[:19])
-    df2b.index = newindex 
-    df2_dict = {}
-    for XScolname in df2.columns:
-        #XScolname = '2014-08-11'
-        intersection = df2b[XScolname[:19]]       
-        if not isinstance(intersection, float):
-            intersection = intersection.iloc[0]
-        df2_dict[XScolname] = df2[XScolname][max(np.int(intersection - postprocess_params['XB_intersection_search_distance']),0) : np.int(intersection + postprocess_params['XB_intersection_search_distance'])].max()  
-    df3 = pd.DataFrame.from_dict(df2_dict,  orient='index')  
-    
-    newindex = []
-    for index in df4.index:
-        newindex.append(pd.to_datetime(index[:19], format = '%Y-%m-%d-%H-%M-%S'))
-    df3.index = newindex
-    df4.index = newindex
-    df5 = pd.concat([ df3,  df4], axis = 1, join='outer')
-    df5.columns = ['maxindex','ABpercent']
-    XS_o_sums_df = df5['ABpercent'] - df5['maxindex']  
-                
-    XS_c_sums_XB_df = XS_c_sums_df
-    XS_o_sums_XB_df = XS_o_sums_df
-    
+    #plot along berm 
+    direction =  'XB'  
+
+    #plot the mNDWI sums along the transects over time      
+    XS_c_sums_XB_df = pd.DataFrame(calculateDeltaToMedian(XS_c_df, postprocess_params, direction))   
+    XS_o_sums_XB_df = pd.DataFrame(calculateDeltaToMedian(XS_o_df, postprocess_params, direction))    
     XS_co_sums_XB_df = XS_c_sums_XB_df.append(XS_o_sums_XB_df)
-    XS_co_sums_XB_df.plot(color='grey', style='--',lw=1.5, alpha=0.5, ax=ax)
     
-    XS_c_sums_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'], alpha = 1.5, ax=ax)
-    XS_o_sums_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], alpha = 1.5, ax=ax)
-    
+    ax=plt.subplot(2,1,2)
+    XS_co_sums_XB_df.plot(color='grey', style='--',lw=0.4, alpha=0.8, ax=ax)
+    XS_c_sums_XB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],  ax=ax)
+    XS_o_sums_XB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)
+    plt.ylim(-0.1,XS_o_sums_AB_df.max().max())
     plt.ylabel('Across-berm Delta-to-median')
+    ax.get_legend().remove()  
          
     fig.tight_layout()   
-    fig.savefig(os.path.join(figure_out_path,'Figure_2_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + postprocess_params['satnames_string'] + '.png'), dpi=400)          
+    fig.savefig(os.path.join(figure_out_path,'Figure_3_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + postprocess_params['satnames_string'] + '.png'), dpi=400)          
     plt.close()
     
+    
+    ################################################################################ 
+    #export the data as csv
+    ################################################################################ 
     
     #combine the processed data into a single dataframe and export as a csv file
     XS_c_sums_XB_df1 = pd.DataFrame(XS_c_sums_XB_df)
@@ -2204,3 +2020,49 @@ def compute_tide_dates(coords,dates,ocean_tide,load_tide):
     tide_level = (ocean_short + ocean_long + load_short + load_long)/100
 
     return tide_level
+
+  
+def load_FES_tide(settings, sat_list, metadata):
+    
+    import pyfes
+    import pytz
+    from datetime import datetime
+        
+    # get tide time-series with 15 minutes intervals
+    time_step = 15*60 
+    date_range = [1985,2021]
+       
+    date_range = [pytz.utc.localize(datetime(date_range[0],5,1)), pytz.utc.localize(datetime(date_range[1],1,1))]
+    config_ocean = os.path.join( settings['filepath_fes'], 'ocean_tide_extrapolated.ini') #double check which one's the correct one to use
+    #config_ocean = os.path.join(filepath_fes, 'ocean_tide_Kilian.ini')
+    #config_ocean_extrap =  os.path.join(filepath_fes, 'ocean_tide_extrapolated_Kilian.ini')
+    config_load =  os.path.join( settings['filepath_fes'], 'load_tide.ini')  
+    ocean_tide = pyfes.Handler("ocean", "io", config_ocean)
+    load_tide = pyfes.Handler("radial", "io", config_load)
+    
+    # coordinates of the location (always select a point 1-2km offshore from the beach) #could add another point to the geometries called tide location
+    Oceanseed_coords = []
+    for b in settings['inputs']['location_shps'].loc[(settings['inputs']['location_shps'].layer=='A')].geometry.boundary:
+        coords = np.dstack(b.coords.xy).tolist()
+        Oceanseed_coords.append(*coords)    
+    coords = Oceanseed_coords[0][0]
+    
+    #obtain full tide time series for date range
+    dates_fes, tide_fes = compute_tide(coords, date_range , time_step, ocean_tide, load_tide)
+     #create dataframe of tides
+    tides_df = pd.DataFrame(tide_fes,index=dates_fes)
+    tides_df.columns = ['tide_level']
+    
+    # get tide level at times of image acquisition
+    # a better way would be to compute this dataframe by subsetting the tides_df with the sat dates, rather than calling pyfes again. 
+    sat_tides_df = pd.DataFrame()
+    for sat in sat_list:
+        dates_sat = metadata[sat]['dates'] 
+        tide_sat_itm = compute_tide_dates(coords, dates_sat, ocean_tide, load_tide)
+        sat_tides_df1 = pd.DataFrame(tide_sat_itm,index=dates_sat)
+        sat_tides_df1.columns = ['tide_level']
+        sat_tides_df1['fn'] = metadata[sat]['filenames']
+        sat_tides_df1['sat'] = sat
+        sat_tides_df = sat_tides_df.append(sat_tides_df1)
+        
+    return sat_tides_df, tides_df  
