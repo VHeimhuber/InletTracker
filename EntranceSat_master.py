@@ -4,7 +4,7 @@
 
 # Valentin Heimhuber, Water Research Laboratory, University of New South Wales, 2020
 
-#%% 1. Initial algorithm settings
+#%% Step 1: Initial algorithm settings & imagery download
 
 #load modules
 import os
@@ -18,24 +18,22 @@ import geopandas as gpd
 import glob
 import pickle
 
-
 # filepath where data will be stored
-filepath_data = os.path.join('H:/WRL_Projects/Estuary_sat_data/', 'data')
+filepath_data = os.path.join('H:/WRL_Projects/Estuary_sat_data/', 'data') #user input required
 
 #sitename as specified in the input input_locations.shp
-sitename = 'LAKEBRUNTON'
-sitename = 'LAKEELLESMERE'
-sitename = 'DURRAS'
+sitename = 'DURRAS' #user input required
 
 #this parameter is used to distinguish progressive 'sets' of analysis that may be based on different seed and receiver point configurations
 #note that within this set of results, a unique directory is created for each path finding index
-Analysis_version = 'V14'  
+Analysis_version = 'PV1'   #user input required
 
 # date range for analysis
-dates = ['1985-01-01', '2020-11-01']
+dates = ['1985-01-01', '2020-11-01']   #user input required
 
 # satellite missions
-sat_list = ['L5','L7','L8','S2']
+sat_list = ['L5','L7','L8','S2'] #user input required
+
 
 satnames = '|'.join(sat_list)
 satnames_string = '_'.join(sat_list)
@@ -63,7 +61,7 @@ inputs = {
         }
 
 # retrieve satellite images from GEE
-#metadata = SDS_download.retrieve_images(inputs)
+#metadata = SDS_download.retrieve_images(inputs) #user input required (hash this line if you have already downloaded the data)
 
 # if you have already downloaded the images, just load the metadata file
 metadata = SDS_download.get_metadata(inputs) 
@@ -84,12 +82,15 @@ settings = {
 
     
     
-#%%  Step 1: create training data
+    
+    
+    
+#%%  Step 2: Create training data
 """
 #create training data
 In this step, a training data set is created via visual inspection of images. 
 It is recommended to:
-    -generate a training dataset of at least 10 open and 10 closed entrances. 
+    -generate a training dataset of at least 10 open and 10 closed entrances. More training data will typically lead to more accurate classification results. 
     -Keep the number of open and closed images roughtly equal (this can be done using 'skip')
     -create at least two equally sized training datasets. One for the Landsat group (including 5,7 and 8) and one for S2. 
      Satellites can be skipped via Esc. 
@@ -108,23 +109,33 @@ settings_training =  { # set parameters for automated entrance detection
 
 
 
-#%%  Step 2: generate tide time series for site (if use_fes_data = True)
+
+
+#%%  Step 3: generate tide time series for site (if use_fes_data = True)
 
 #load tide data for analysis period and at all image acquisition times from the FES2014 global tide model
 if settings['use_fes_data']:
-    sat_tides_df, sat_tides_df   =     SDS_entrance.load_FES_tide(settings, sat_list, metadata)
+    sat_tides_df , tides_df  =     SDS_entrance.load_FES_tide(settings, sat_list, metadata)
 else:
     tides_df = pd.DataFrame()
     sat_tides_df = pd.DataFrame()   
 
 
-#%%  Step 3: find transects automatically and write results to dataframe and pickle files
+
+
+
+
+#%%  Step 4: find transects automatically and write results to dataframe and pickle files
 """
-This is the major processing step of the algorithm consisting of: 
+This is the major automated processing step of the algorithm consisting of: 
     -automated image pre-processing
     -along-berm and across-berm path finding and export of paths via ESRI shapefile
     -extraction of NIR, SWIR1, NDWI and mNDWI along each transect and export via csv and pkl files
-    -export of a result dashboard .png for each image showing all important entrance detection features
+    -export of a result dashboard .png for each image showing all important entrance detection features 
+    -the results are stored in an automatically generated directory
+    -for each algorithm configuration, the SDS_entrance.automated_entrance_paths function only has to be executed once
+    -durin postprocessing, the results are then read in based on the parameters provided in settings_entrance
+    -during parameter tuning, it is recommended to use the ''number_of_images parameter to limit the number of images being processed here
 """
 
 # set parameters for automated entrance detection 
@@ -180,30 +191,39 @@ settings_entrance =  {
 
 
 
-#%%  Step 4: Post-processing
+
+
+
+
+#%%  Step 5: Post-processing & analysis
 """
-Post-processing part of the toolkit. 
-    This involves the calculation of the delta-to-median (DTM) parameter from the automatically traced along-berm and across-berm transects of Step 3
-    Based on the user generated training dataset, an optimal classification threshold is identified for the DTM series
-    This threshold is then used to classify the full image series into open vs. closed entrane states. 
-    The resulting time series are plotted in a variety of different plots for analysis
-    They are also written out in the form of csv files which can be used as the basis for additional user analyses
+Post-processing and data analysis part of the toolkit. 
+    This involves the calculation of the delta-to-median (DTM) parameter from the automatically traced along-berm and across-berm transects of Step 4
+    Based on the user generated training dataset, an optimal classification threshold is identified for the DTM series (5.2) 
+    This threshold is then used to classify the full image series into open vs. closed entrane states. (5.2)
+    The automated entrance state detections can be manually checked in step 5.3, which is optional. 
+    The resulting time series are plotted in a variety of different plots for analysis (5.4)
+    They are also written out in the form of csv files which can be used as the basis for additional user analyses (5.4)
 """   
-    
-#parameters for processing   
-postprocess_params = {   
-    'Postprocessing_version' : 'PV2',
-    #'tide_rolling_windowsize' : 10 ,               
-    'spectral_index' : 'mndwi',                 #ndwi, nir, swir or mndwi
-    'AB_metric' : 'delta to percentile',       #minmax or 'area under percentile'  'delta to percentile'
-    'XB_metric' : 'delta to percentile',       #minmax or 'delta to percentile'
-    'metric_percentile' : 0.5 ,                #which percentile to use for 'delta to median' parameter. Typically 0.5! 
+  
+########################## 
+#5.1 Set parameters for processing and load all required datasets
+########################## 
+  
+#set processing parameters
+postprocess_params = { 
+    #processing parameters - consider carefully 
+    'Postprocessing_version' : 'PV3',           #this is a unique identifier used to distinguish different postprocessing versions (e.g. based on different spectral index)
+    'spectral_index' : 'mndwi',                 #band/index used for inferring entrance states via delta-to-median parameter: options are ndwi, nir, swir or mndwi
+    'metric_percentile' : 0.5 ,                 #which percentile to use for 'delta to median' parameter. Typically recommended to be 0.5, which is the median.  
     'AB_intersection_search_distance' : 100,    #window on either side of the AB intersection to limit the calculation of the area under the Xth percentile | should be bit bigger than the max width of the entrance
     'XB_intersection_search_distance' : 100,    #window on either side of the XB intersection to locate maximum (m)NDWI in the area of the channel bottleneck.
+    
+    # other parameters - do not have to be changed
     'satnames' : satnames,                      #these satellites are included in postprocessing. This variable is defined at the top of this script. 
     'satnames_string' : satnames_string,
     
-    #plotting parameters - do not have to be changed
+    # plotting parameters - do not have to be changed
     'closed_color' : 'orangered',
     'open_color' : 'royalblue',
     'xaxisadjust' : 0,
@@ -219,67 +239,65 @@ postprocess_params = {
     }
 
 
+#load the pickle file containing the outputs of the pathfinding algorithm. This will load the results processed via the above 'settings_entrance' from Step 4
 
-########################## 
-#Loading datasets and sorting by open vs. closed
-########################## 
-
-#load the pickle file containing the outputs of the pathfinding algorithm. This will load the results processed via the above 'settings_entrance'
+#define data input and figure output paths
 postprocess_out_path = os.path.join(filepath_data, sitename,  'results_' + settings['inputs']['analysis_vrs'], 'XB' + str(settings_entrance['XB_cost_raster_amp_exponent']) + 
                                 '_AB' + str(settings_entrance['AB_cost_raster_amp_exponent']) + '_' + settings_entrance['path_index'])
+figure_out_path = os.path.join(postprocess_out_path,'Analyzed_for_' + postprocess_params['satnames_string'] + '_' + postprocess_params['spectral_index']  + '_' +  postprocess_params['Postprocessing_version'])
+
+#create directories if they do not already exist
 if not os.path.exists(postprocess_out_path ):
         os.makedirs(postprocess_out_path) 
-        
-figure_out_path = os.path.join(postprocess_out_path,'Analyzed_for_' + postprocess_params['satnames_string'] + '_' + postprocess_params['spectral_index']  + '_' +  postprocess_params['Postprocessing_version'])
 if not os.path.exists(figure_out_path):
         os.makedirs(figure_out_path) 
 
+#open pickly file generated via SDS_entrance.automated_entrance_paths
 infile = open(os.path.join(postprocess_out_path, sitename + '_entrance_lines_auto_' + settings_entrance['path_index'] +'_based_Loop_dict.pkl'),'rb')
 
-#load indices along the transects into the cross-section dataframe (XS_df)
+#load indices along the transects from Step 4 into the cross-section dataframe (XS_df)
 XS_dict = pickle.load(infile)
 infile.close()
 XS_df = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in XS_dict.items() ]))
 
-#load spatial transects into the cross-section pandas geo dataframe (XS_gdf)
+#load spatial transects into the cross-section pandas geodataframe (XS_gdf)
 infile = open(os.path.join(postprocess_out_path,  sitename + '_entrance_lines_auto_' + settings_entrance['path_index'] +'_based_Loop_gdf.pkl'),'rb')
 XS_gdf = pickle.load(infile)
 infile.close()
 
 #load training data into dataframe
 Training_data_df  =  pd.read_csv(glob.glob(os.path.join(filepath_data, sitename) + '/User_validation_data/*' +  '*training*' +  settings_training['username'] +  '.csv' )[0], index_col=0) 
-Training_data_df = Training_data_df[~Training_data_df.index.duplicated(keep='first')]
+Training_data_df = Training_data_df[~Training_data_df.index.duplicated(keep='first')] #remove possible duplicate entries. 
 
 
 
 
 ########################## 
-# Classify the image series into binary entrance states based on training data or user defined threshold
+# 5.2 Identify optimal classification threshold and classify the image series into binary entrance states
 ########################## 
 
 #create dataframe of delta-to-median parameter for all open and closed training images as the basis for identifying the optimal classificaiton threshold
 Classification_df = SDS_entrance.setup_classification_df(XS_df, Training_data_df,postprocess_params)
 
-
-#identify the optimal classification threshold along and across berm and calculate classification accuracy metrics
-#(binary entrance states are defined as 'open' = 1, 'closed' =  0)
+#identify optimal classification threshold: binary entrance states are defined as 'open' = 1, 'closed' =  0
 Validation_stats_df={} 
 Validation_stats_df[sitename + '_Across_berm'] = SDS_entrance.bestThreshold(Classification_df['user_entrance_state'],  Classification_df['Across_berm_DTM'])
 Validation_stats_df[sitename + '_Along_berm'] = SDS_entrance.bestThreshold(Classification_df['user_entrance_state'],  Classification_df['Along_berm_DTM'])
 Validation_stats_df = pd.DataFrame(dict([ (k,pd.Series(v)) for k,v in Validation_stats_df.items() ])) 
 Validation_stats_df = Validation_stats_df.transpose()
-Validation_stats_df.columns = ['Fscore','Accuracy', 'TN', 'FP', 'FN', 'TP', 'Opt_threshold'] 
+Validation_stats_df.columns = ['Fscore','Accuracy', 'TN', 'FP', 'FN', 'TP', 'Opt_threshold']  #TN = true negative, FP = false positives... 
+print(Validation_stats_df)
 
 #set the thresholds for along and across-berm classification into binary entrance states
-Analysis_direction =  'AB' #AB for along-berm, XB for across berm
+Analysis_direction =  'AB' #AB for along-berm, XB for across berm. Choose the analysis direction that lead to the highes Fscore and Accuracy above. 
 
-#use optimal threshold inferred from user validation data
+#use optimal threshold inferred from user validation data - the parameter is DTM_threshold
 if Analysis_direction == 'XB':
     DTM_threshold =  Validation_stats_df['Opt_threshold'][0] #if across-berm classification stats were better 
 else:
     DTM_threshold =  Validation_stats_df['Opt_threshold'][1] #if along-berm classification stats were better 
 
-#Alternatively, use a user-defined fixed threshold
+#Alternatively, use a user-defined fixed threshold via overriding of the DTM_threshold parameter established above. 
 #DTM_threshold =  0.1
 
 #classify the full image series based on the best performing analysis direction and corresponding threshold
@@ -287,16 +305,22 @@ XS_DTM_classified_df = SDS_entrance.classify_image_series_via_DTM(XS_df, Analysi
 
 
 
+##########################
+#5.3 Check detection
+##########################
+
 #Here, the user has the ability to go over every single automated entrance state detection via a interactive pop-up window
 #this can be used to get rid of possibly cloudy or otherwise problematic detections - to ultimately create a clean result time series 
 #Note that you have to go through the entire image series for this step 
 #For a first pass assessment or under limited time, skip this step! 
+
+#run the 'check detection' function and create a clean XS_DTM_classified_df
 #XS_DTM_classified_df = SDS_entrance.check_entrance_state_detection(postprocess_out_path, XS_DTM_classified_df.iloc[0:10])
     
     
     
 ##########################
-#Divide the original data into open and closed entrance states as basis for plotting
+#5.4 Divide the original data into open and closed entrance states and plot result figures
 ########################## 
 
 #Create dataframes and geodataframes corresponding to the open and closed classified entrance states. 
@@ -317,10 +341,7 @@ for date in XS_DTM_classified_df[XS_DTM_classified_df['bin_entrance_state'] == 0
     XS_c_df = pd.concat([XS_c_df, pd.DataFrame(XS_df.filter(regex=date))], axis = 1)
     XS_c_gdf = pd.concat([XS_c_gdf, XS_gdf[XS_gdf['date'] == date]], axis = 0)
 
-
-##########################
 #plot result figures and save processed data as csv
-##########################
 SDS_entrance.plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, postprocess_params, metadata,  figure_out_path)
 
 
