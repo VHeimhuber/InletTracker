@@ -92,7 +92,9 @@ Importantly, the FES2014 tide levels are provided to the user but it is not curr
 	8. Lastly, to integrate the FES2014 data in EntranceSat, ensure to set the following parameter to true in the settings: 'use_fes_data': True
 
 
-**Note**: If the FES2014 creates any issues, you can always run EntranceSat without this data via settings: 'use_fes_data': False. Alternatively, the sat_tides_df and tides_df pandas timeseries data frames can be created manually by the user from other sources of tide data. Examples of these dataframes are provided in the EntranceSat example.
+**Note**: If setup of FES2014 creates any issues, you can always run EntranceSat without this data via setting 'use_fes_data' to False in 'settings'. Alternatively, the sat_tides_df and tides_df pandas timeseries data frames can be created manually by the user from other sources of tide data. Examples of these dataframes are provided in the EntranceSat example.
+
+
 
 
 
@@ -108,7 +110,7 @@ It is recommended that new analysis regions/ IOCEs are added directly to the inp
 
 The full_bounding_box polygon is used for selecting and cropping of the satellite imagery from the Google Earth Engine. This does not necessarily have to incorporate the entire estuary water body. The area of this polygon should not exceed 100 km2.
 
-Points A and C are the seed point for the automated tracing of the across-berm and along-berm paths. B and D are the receiver points. A to B is the across-berm path. C to D is the along-berm path. Points A to D should be kept as very small triangles. The first point of this triangle is used as seed/receiver point during analysis. This is a workaround since shapefiles cannot contain polygons and points at the same time.
+Points A and C are the seed points for the automated tracing of the across-berm and along-berm paths. B and D are the receiver points. A to B is the across-berm path. C to D is the along-berm path. In the shapefile, points A to D should be built as very small triangles. The first point of this triangle is used as seed/receiver point during analysis. This is a workaround since shapefiles cannot contain polygons and points at the same time.
 
 The A-B and C-D masks are used for limiting the area for least-cost pathfinding to within those polygons. The location of the seed and receiver points and shape of these masks can significantly affect the performance of the pathfinding and it is recommended to play around with these shapes initially by doing test runs based on a limited number of images until satisfactory performance is achieved.
 
@@ -130,6 +132,8 @@ This is where the base parameters for the entrance state analysis are establishe
 #### Step 2: Generate training data  
 Generate training data through the interactive user interface shown below. Generally, the more images you classify into open vs. closed entrance states, the better but we recommend at least 10 open and 10 closed entrance states to be included for each group of satellites (Landsat 5,7 and 8) and (Sentinel-2). Use the arrows on the keyboard to 'classify' each image. Equal 'class sizes' can be achieved by using 'skip'. Users can use the 'username' : 'EntranceSat' parameter to generate multiple different sets of training data (although each full entrance state analysis is always only based on a single set of training data)
 
+Use 'skip' if the image is cloudy or otherwise of poor quality. User 'unclear' if you can't tell whether the entrance is open or closed.
+
 ![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/training_data_generator.png)
 
 #### Step 3: Load tide data
@@ -138,7 +142,7 @@ Generate tide time series (if use_fes_data = True). In this step, EntranceSat us
 #### Step 4: Least-cost path finding
 This step is the least-cost path finding step, which is the core step of the EntranceSat algorithm. This will process all downloaded images that have less than the user defined threshold of cloud cover over the across-berm mask. For each image, the least-cost path finding algorithm is run and the core bands and spectral indices are then extracted along those transects as input to the second major analysis step. Most of the input parameters to the SDS_entrance.automated_entrance_paths function (settings_entrance) don't need to be changed. The first 8 parameters should be considered more carefully since they have significant impact on the results. The most important parameter here is 'path_index', which defines which band or index will be used as the cost surface for least-cost path finding. Guidance on selecting the most suitable option for this is provided in the aforementioned journal paper. All other parameters can initially be left unchanged.
 
-For each image, EntranceSat creates the following 'dashboard' output and save it as a png file.
+For each image, EntranceSat creates the following 'dashboard' output and saves it as a png file in the designated directory.
 ![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/1989-02-20-23-14-27_L5_DURRAS_swir_based_ABexp_%2025_XBexp_%2025_MAdis_60.png)
 
 **Note**: When you run the SDS_entrance.automated_entrance_paths function, the results are automatically written to a newly established subdirectory, which is named based on some of the parameters provided in settings_entrance. In the postprocessing step, this data is then read-in again based on the parameters provided in settings_entrance. This is done to enable multiple pathfinding parameter configurations to be run and tested.
@@ -157,7 +161,7 @@ At the beginning of Step 5, all result files (e.g. pickle files) are read in fro
 
 Based on the data generated by the least-cost path finding step (Step 4), EntranceSat calculates the delta-to-median parameter for each image, which is indicative of the state of the entrance and/or size of a possible opening. The calculation of this parameter is illustrated in the following figure. Details are provided in the publication listed above and in the code itself.
 
-![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/inferring entrance states method illustration.png)
+![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/inferring_entrance_states_method_illustration.png)
 
 After this threshold is identified, the full image series is classified into open vs. closed entrance states via SDS_entrance.classify_image_series_via_DTM
 
@@ -171,14 +175,14 @@ This is a quality control step. Here, the user has the ability to go over every 
 
 By running the SDS_entrance.plot_entrancesat_results function, a number of output datasets are generated and stored in a dedicated directory. These outputs include:
 
-		-Location plots of the identified least cost paths:
-		![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_1_mndwi_15-02-2021_L5_L7_L8_S2.png)
-		-Spectral Transect plots:
-		![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_2_mndwi_15-02-2021_L5_L7_L8_S2.png)
-		-Time series plots of the delta to median parameter:
-		![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_3_mndwi_15-02-2021_L5_L7_L8_S2.png)
-		-CSV files with all the processed data.
-		-Shapefile containing all of the least-cost paths corresponding to open entrances.
+-Location plots of the identified least cost paths:
+![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_1_mndwi_15-02-2021_L5_L7_L8_S2.png)
+-Spectral Transect plots:
+![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_2_mndwi_15-02-2021_L5_L7_L8_S2.png)
+-Time series plots of the delta to median parameter:
+![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_3_mndwi_15-02-2021_L5_L7_L8_S2.png)
+-CSV files with all the processed data.
+-Shapefile containing all of the least-cost paths corresponding to open entrances.
 
 
-That's it - you have now successfully used the EntranceSat toolbox to analyse the entrance state of an intermittent estuary or a similar landform. 
+That's it - you have now successfully used the EntranceSat toolbox to analyse the entrance state of an intermittent estuary or a similar landform.
