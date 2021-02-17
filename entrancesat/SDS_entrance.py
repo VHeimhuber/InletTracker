@@ -85,6 +85,8 @@ def polygon2mask(image_shape, polygon):
 
 def maskimage_frompolygon(image, polygonndarray):
     """
+    VH UNSW 2021
+        
     function that uses an nparray image and an nparray polygon as input and 
     returns a copy of the image with the pixels outside the polygon masked as np.NAN
     mask an nparray image with 1 dimension based on a polygon in nparray format
@@ -98,11 +100,13 @@ def maskimage_frompolygon(image, polygonndarray):
     image_masked[mask != 9999] = np.NAN
     return image_masked
 
+
 def maskimage_frompolygon_set_value(image, polygonndarray, mask_value):
     """
+    VH UNSW 2021
+        
     function that uses an nparray image and an nparray polygon as input and 
     returns a copy of the image with the pixels outside the polygon masked as mask_value
-    mask an nparray image with 1 dimension based on a polygon in nparray format
     """
     image_shape = (image.shape)
     #swap x and y coordinates
@@ -117,14 +121,44 @@ def maskimage_frompolygon_set_value(image, polygonndarray, mask_value):
 
 #generate bounding box in pixel coordinates
 def get_bounding_box_minmax(polygonndarray):
+    """
+    VH UNSW 2021
+        
+    function that calculates a bounding box around a polygon
+    """
     Xmin = np.min(polygonndarray.astype(int)[:,0])
     Xmax = np.max(polygonndarray.astype(int)[:,0])
     Ymin = np.min(polygonndarray.astype(int)[:,1])
     Ymax = np.max(polygonndarray.astype(int)[:,1])
     
-    return Xmin,Xmax, Ymin,Ymax
+    return Xmin,Xmax,Ymin,Ymax
+
+
+def load_shapes(site_shapefile_name, sitename):
+    """
+    VH UNSW 2021
+        
+    load individual polygons from a shapefile 
+    """
+    
+    location_shp_fp = os.path.join(os.getcwd(), 'user_inputs', site_shapefile_name)
+    Allsites = gpd.read_file(location_shp_fp)
+    Site_shps = Allsites.loc[(Allsites.Sitename==sitename)]
+    layers = Site_shps['layer'].values
+    #Site_shps.plot(color='None', edgecolor='black')
+    BBX_coords = []
+    for b in Site_shps.loc[(Site_shps.layer=='full_bounding_box')].geometry.boundary:
+        coords = np.dstack(b.coords.xy).tolist()
+        BBX_coords.append(*coords) 
+    return Site_shps, layers, BBX_coords
 
 def load_shapes_as_ndarrays(layers,Site_shps, satname, sitename, shapefile_EPSG,  georef, metadata, image_epsg):
+    """
+    VH UNSW 2021
+        
+    load polygons from a shapefile as ndarrays
+    """
+    
     shapes = dict.fromkeys(layers)
     for key in shapes.keys():
         coords = []
@@ -136,9 +170,14 @@ def load_shapes_as_ndarrays(layers,Site_shps, satname, sitename, shapefile_EPSG,
         shapes[key] = coords      
     return shapes
 
+
+
 def classify_binary_otsu(im_1d, cloud_mask):
     """
-    classify a greyscale image using otsu thresholding
+    VH UNSW 2021
+        
+    classify a greyscale image of a water sensitive band/index using otsu thresholding
+    
     returns classified image where 0 = water, 1 = dryland
     """
     vec_ndwi = im_1d.reshape(im_1d.shape[0] * im_1d.shape[1])
@@ -165,6 +204,8 @@ def set_openvsclosed(im_ms, inputs,jpg_out_path, cloud_mask,  georef,
     """
     Shows the image to the user for visual detection of the entrance state. The user can select "open", "closed",
     "unclear" or "skip" if the image is of poor quality.
+    
+    This function is a modified version of a similar function provided in coastsat
 
     VH WRL 2020
 
@@ -347,24 +388,17 @@ def create_training_data(metadata, settings, settings_training):
     
     This can be done for the entire dataset or to a limited number of images, which will then be used to train the machine learning classifier for open vs. closed
 
-    VH WRL 2020
+    VH UNSW 2020
 
     Arguments:
     -----------
         metadata: dict
             contains all the information about the satellite images that were downloaded
-
         settings: dict
-            contains the following fields:
-        sitename: str
-            String containig the name of the site
-        cloud_mask_issue: boolean
-            True if there is an issue with the cloud mask and sand pixels are being masked on the images
-        check_detection: boolean
-            True to show each invidual satellite image and let the user decide if the entrance was open or closed
+        settings_training : dict
     Returns:
     -----------
-        output: dict
+        output: pandas dataframe
             contains the training data set for all inspected images
 
     """      
@@ -433,9 +467,8 @@ def create_training_data(metadata, settings, settings_training):
                 Xmin,Xmax,Ymin,Ymax = get_bounding_box_minmax(shapes['A-B Mask'])      
                     
                 #Manually check entrance state to generate training data
-                if settings_training['save_figure']:
-                    vis_open_vs_closed, skip_image, keep_checking = set_openvsclosed(im_ms, settings['inputs'],jpg_out_path, cloud_mask, georef, settings_training, date,
-                                                                                                   satname, Xmin, Xmax, Ymin, Ymax, i, filenames)     
+                vis_open_vs_closed, skip_image, keep_checking = set_openvsclosed(im_ms, settings['inputs'],jpg_out_path, cloud_mask, georef, settings_training, date,
+                                                                                               satname, Xmin, Xmax, Ymin, Ymax, i, filenames)     
                 #add results to intermediate list
                 Training[date] =  satname, vis_open_vs_closed, skip_image
     
@@ -451,12 +484,11 @@ def create_training_data(metadata, settings, settings_training):
 
 def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , sat_tides_df):
     """
-    Function that automatically finds the connecting path from the ocean seed point
-    to the entrance receiver point, regardless weather the entrance is open or not
+    Function that loops through the satellite imagery and, for each image, 
+    automatically finds the connecting path from the seed to the receiver poins via 
+    least-cost path finding (regardless weather the entrance is open or not)
     
     This can be done for the entire dataset or to a limited number of images
-    
-    It is mainly for research and algorithm refinement purposes
 
     VH WRL 2020
 
@@ -476,10 +508,15 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
             Currently either NDWI or mNDWI: This is the spectral index that will be used for detecting the least cost path. 
         tide_bool:
             Include analysis of the tide via pyfes global tide model - need to discuss whether to leave this included or not due to user difficulties
+        settings_entrance: dict
+            contains parameters relevant for the performance of these functions
     Returns:
     -----------
-        output: pandas dataframe withthe NDWI values along the transect for each image
-        if plotbool = True: each detection will be output as a plot in png as well
+        output: pandas dataframes with bands and indices along each transect for each image
+                pandas geodataframe with along-berm and across-berm paths stored as polylines
+                this data is automatically stored in dedicated directories
+                
+        if plotbool = True: each detection will be output as an overview dashboard style plot in png as well
 
     """           
     #plot font size and type
@@ -525,9 +562,10 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
         epsg_dict = dict(zip(filenames, metadata[satname]['epsg']))
         dates_dict = dict(zip(filenames, metadata[satname]['dates']))
         
-        #subset the tide df to the time period of the satellite
-        tides_df_ss = tides_df[metadata[satname]['dates'][1]- timedelta(days=200):metadata[satname]['dates'][-1]+ timedelta(days=200)]
-        sat_tides_df_ss = sat_tides_df[sat_tides_df.fn.str.contains('_'+satname+'_')]  
+        #subset the tide df to the time period of the satellite | ss = subset
+        if settings['use_fes_data']:
+            tides_df_ss = tides_df[metadata[satname]['dates'][1]- timedelta(days=200):metadata[satname]['dates'][-1]+ timedelta(days=200)]
+            sat_tides_df_ss = sat_tides_df[sat_tides_df.fn.str.contains('_'+satname+'_')]  
         
         #loop through images and process automatically
         dt0 = pytz.utc.localize(datetime(1,1,1))
@@ -541,14 +579,14 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
             if (dt - dt0).total_seconds() < time_delta:
                 print('skipping %s'%filenames[i])
                 continue
-            dt0 = dt
-            
+            dt0 = dt        
             
             if i < settings_entrance['skip_img_' + satname][0]:
                 continue
             if i in settings_entrance['skip_img_'+ satname]:
                 continue
             print(str(i) + ' ' + filenames[i])
+            
             # read image
             fn = SDS_tools.get_filenames(filenames[i],filepath, satname)
             im_ms, georef, cloud_mask, im_extra, im_QA, im_nodata = SDS_preprocess.preprocess_single(fn, satname, settings['cloud_mask_issue'])
@@ -560,8 +598,11 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                 continue
             
             #tide at time of image acquisition as string
-            img_tide = str(np.round(sat_tides_df_ss['tide_level'][sat_tides_df_ss['fn']==filenames[i]].values[0],2))
-      
+            if settings['use_fes_data']:
+                img_tide = str(np.round(sat_tides_df_ss['tide_level'][sat_tides_df_ss['fn']==filenames[i]].values[0],2))
+            else:
+                img_tide = '9999'
+                
             #load all shape and area polygons in pixel coordinates to set up the configuration for the spatial analysis of entrances
             shapes = load_shapes_as_ndarrays(settings['inputs']['location_shps']['layer'].values, settings['inputs']['location_shps'], satname, sitename, settings['shapefile_EPSG'],
                                                georef, metadata, epsg_dict[filenames[i]] )   
@@ -864,16 +905,16 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                 ax.axis('off')
                 plt.xlim(Xmin-settings_entrance['img_crop_adjsut'], Xmax+settings_entrance['img_crop_adjsut'])
                 plt.ylim(Ymax,Ymin) 
-                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color='yellow', fontsize=16)               
-                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color='yellow', fontsize=16)                
+                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)               
+                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)                
                 if len(Intersection_coords) >= 1:
                     ax.plot(Intersection_coords[0], Intersection_coords[1],"x", color='cyan', markersize=15, lw=1.5)
                     #plt.text(Intersection_coords[0]+2, Intersection_coords[1]+2,'X',horizontalalignment='left', color='cyan', fontsize=16)
@@ -922,7 +963,7 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     ax.plot(ptsbbx_pix_interp[:,1], ptsbbx_pix_interp[:,0], 'r--', color='lime')  
                 
                 #plot tidal histogram instead of RGB if desired
-                if settings_entrance['plot_tide_histogram']:
+                if settings['use_fes_data'] & settings_entrance['plot_tide_histogram']:  
                     # plot time-step distribution
                     seaborn.kdeplot(tides_df_ss['tide_level'], shade=True,vertical=False, color='blue',bw=settings_entrance['hist_bw'],legend=False, lw=2, ax=ax)
                     seaborn.kdeplot(sat_tides_df_ss['tide_level'], shade=True,vertical=False, color='lightblue',bw=settings_entrance['hist_bw'], legend=False, lw=2, ax=ax)
@@ -930,16 +971,6 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     plt.ylabel('Probability density', fontsize=settings_entrance['axlabelsize'])
                     plt.xlabel('Tides over full period (darkblue) and during images only (lightblue)', fontsize=settings_entrance['axlabelsize'])
                     plt.axvline(x=sat_tides_df_ss['tide_level'][i], color='red', linestyle='dotted', lw=2, alpha=0.9) 
-                    #plt.text(sat_tides_df_ss['tide_level'][i] , 0.5 ,  'tide @image', rotation=90 , ha='right', va='bottom', alpha=settings_entrance['vhline_transparancy'])                                   
-#                    t = np.array([_.timestamp() for _ in dates_sat]).astype('float64')
-#                    delta_t = np.diff(t)
-#                    #fig, ax = plt.subplots(1,1,figsize=(12,3), tight_layout=True)
-#                    ax.grid(which='major', linestyle=':', color='0.5')
-#                    bins = np.arange(np.min(delta_t)/seconds_in_day, np.max(delta_t)/seconds_in_day+1,1)-0.5
-#                    ax.hist(delta_t/seconds_in_day, bins=bins, ec='k', width=1);
-#                    ax.set(xlabel='timestep [days]', ylabel='counts',
-#                           xticks=n_days*np.arange(0,20),
-#                           xlim=[0,50], title='Timestep distribution');
                 
                 #plot SWIR1
                 ax=plt.subplot(4,3,1) 
@@ -952,16 +983,16 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                 plt.rcParams["axes.grid"] = False
                 plt.xlim(Xmin-settings_entrance['img_crop_adjsut'], Xmax+settings_entrance['img_crop_adjsut'])
                 plt.ylim(Ymax,Ymin) 
-                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color='yellow', fontsize=16)               
-                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color='yellow', fontsize=16)                
+                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)               
+                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)                
                 if len(Intersection_coords) >= 1:
                     ax.plot(Intersection_coords[0], Intersection_coords[1],"x", color='cyan', markersize=15, lw=1.5)
                 if settings_entrance['plt_colorbars']:
@@ -977,16 +1008,16 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                 ax.axis('off')
                 plt.xlim(Xmin-settings_entrance['img_crop_adjsut'], Xmax+settings_entrance['img_crop_adjsut'])
                 plt.ylim(Ymax,Ymin)  
-                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color='yellow', fontsize=16)               
-                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color='yellow', fontsize=16)                
+                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)               
+                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)                
                 if len(Intersection_coords) >= 1:
                     ax.plot(Intersection_coords[0], Intersection_coords[1],"x", color='cyan', markersize=15, lw=1.5)        
                 if settings_entrance['plt_colorbars']:
@@ -1004,16 +1035,16 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                 #plt.colorbar()
                 plt.xlim(Xmin-settings_entrance['img_crop_adjsut'], Xmax+settings_entrance['img_crop_adjsut'])
                 plt.ylim(Ymax,Ymin) 
-                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp[0,0]+1, pts_pix_interp[0,1]+1,'A',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp[-1,0]+1, pts_pix_interp[-1,1]+1,'B',horizontalalignment='left', color='yellow', fontsize=16)
-                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color='yellow', fontsize=16)
+                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp[0,0]+1, pts_pix_interp[0,1]+1,'A',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp[-1,0]+1, pts_pix_interp[-1,1]+1,'B',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)
+                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)
                 if settings_entrance['plt_colorbars']:
                     plt.colorbar()
                     
@@ -1029,22 +1060,22 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                 plt.rcParams["axes.grid"] = False
                 plt.xlim(Xmin-settings_entrance['img_crop_adjsut'], Xmax+settings_entrance['img_crop_adjsut'])
                 plt.ylim(Ymax,Ymin) 
-                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp[0,0]+1, pts_pix_interp[0,1]+1,'A',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp[-1,0]+1, pts_pix_interp[-1,1]+1,'B',horizontalalignment='left', color='yellow', fontsize=16)
-                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color='yellow')
-                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color='yellow')
-                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color='yellow')
-                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color='yellow' , fontsize=16)
-                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color='yellow', fontsize=16)
+                ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp[0,0]+1, pts_pix_interp[0,1]+1,'A',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp[-1,0]+1, pts_pix_interp[-1,1]+1,'B',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)
+                ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color=settings_entrance['transect_color'])
+                ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color=settings_entrance['transect_color'])
+                plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)
                 if settings_entrance['plt_colorbars']:
                     plt.colorbar()
                     
                 #plot tide series or, if not chosen, the alternative index
                 ax=plt.subplot(4,3,6) 
-                if settings_entrance['tide_bool']:               
+                if settings['use_fes_data']:               
                     ax.set_title('Tide level at img aquisition = ' + img_tide +  ' [m aMSL]', fontsize=settings_entrance['axlabelsize'])
                     ax.grid(which='major', linestyle=':', color='0.5')
                     ax.plot(tides_df_ss.index, tides_df_ss['tide_level'], '-', color='0.6')
@@ -1057,21 +1088,21 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                 else:
                     plt.imshow(im_bathy_sdb, cmap='seismic') #, vmin=0.9, vmax=1.1) 
                     ax.axis('off')
-                    plt.title(settings_entrance['path_index_id'] + ' index ', fontsize=settings_entrance['axlabelsize'])
+                    plt.title(settings_entrance['index_id'] + ' index ', fontsize=settings_entrance['axlabelsize'])
                     #plt.colorbar()
                     plt.rcParams["axes.grid"] = False
                     plt.xlim(Xmin-settings_entrance['img_crop_adjsut'], Xmax+settings_entrance['img_crop_adjsut'])
                     plt.ylim(Ymax,Ymin) 
-                    ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color='yellow')
-                    ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color='yellow')
-                    ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color='yellow')
-                    plt.text(pts_pix_interp[0,0]+1, pts_pix_interp[0,1]+1,'A',horizontalalignment='left', color='yellow' , fontsize=16)
-                    plt.text(pts_pix_interp[-1,0]+1, pts_pix_interp[-1,1]+1,'B',horizontalalignment='left', color='yellow', fontsize=16)
-                    ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color='yellow')
-                    ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color='yellow')
-                    ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color='yellow')
-                    plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color='yellow' , fontsize=16)
-                    plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color='yellow', fontsize=16)
+                    ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=settings_entrance['transect_color'])
+                    plt.text(pts_pix_interp[0,0]+1, pts_pix_interp[0,1]+1,'A',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                    plt.text(pts_pix_interp[-1,0]+1, pts_pix_interp[-1,1]+1,'B',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)
+                    ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color=settings_entrance['transect_color'])
+                    plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                    plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)
                                       
                 ax=plt.subplot(4,3,7)
                 if settings_entrance['path_index'] in ['ndwi', 'nir']:  
@@ -1164,7 +1195,7 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     #plt.ylim(0.6,1.4)
                     plt.axhline(y=np.nanpercentile(z_bathy_B, settings_entrance['sand_percentile']), xmin=-1, xmax=1, color='orchid', linestyle='-.', lw=1.2, alpha=0.9)
                     plt.xlabel('Distance along transect [m]', fontsize=settings_entrance['axlabelsize'])
-                    plt.ylabel(settings_entrance['path_index_id'] + ' Index [-]', fontsize=settings_entrance['axlabelsize'])
+                    plt.ylabel(settings_entrance['index_id'] + ' Index [-]', fontsize=settings_entrance['axlabelsize'])
                     ax.get_legend().remove()
                  
                 #plot single band transects C-D
@@ -1201,7 +1232,7 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     pd.DataFrame(z_bathy_B).plot(color='blue', linestyle='--', ax=ax) 
                     plt.axhline(y=np.nanpercentile(z_bathy_B, settings_entrance['sand_percentile']), xmin=-1, xmax=1, color='orchid', linestyle='-.', lw=1.2, alpha=0.9)
                     plt.xlabel('Distance along transect [m]', fontsize=settings_entrance['axlabelsize'])
-                    plt.ylabel(settings_entrance['path_index_id'] + ' Index [-]', fontsize=settings_entrance['axlabelsize'])
+                    plt.ylabel(settings_entrance['index_id'] + ' Index [-]', fontsize=settings_entrance['axlabelsize'])
                     ax.get_legend().remove() 
                 
                 #histograms
@@ -1210,16 +1241,16 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     seaborn.kdeplot(z_swir, shade=True,vertical=False, color='lightblue',bw=settings_entrance['hist_bw'], legend=False, lw=2, ax=ax)
                     plt.xlim(-0.1,1)
                     seaborn.kdeplot(z_swir_B, shade=True,vertical=False, color='orange',bw=settings_entrance['hist_bw'],legend=False, lw=2, ax=ax)
-                    plt.axvline(x=np.nanpercentile(z_ndwi_B, settings_entrance['sand_percentile'] )    , color='orchid', linestyle='dotted', lw=2, alpha=1) 
-                    plt.text(np.nanpercentile(z_ndwi_B, settings_entrance['sand_percentile'] )     , 0.5 ,  str(settings_entrance['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_entrance['vhline_transparancy'])                                         
+                    plt.axvline(x=np.nanpercentile(z_swir_B, settings_entrance['sand_percentile'] )    , color='orchid', linestyle='dotted', lw=2, alpha=1) 
+                    plt.text(np.nanpercentile(z_swir_B, settings_entrance['sand_percentile'] ) , 0.5 ,  str(settings_entrance['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_entrance['vhline_transparancy'])                                         
                     plt.ylabel('Probability density', fontsize=settings_entrance['axlabelsize'])
                     plt.xlabel('SWIR1 along A-D (lightblue) and C-D (orange) transect', fontsize=settings_entrance['axlabelsize']) 
                 if settings_entrance['path_index'] in ['ndwi', 'nir']: 
                     seaborn.kdeplot(z_ndwi, shade=True,vertical=False, color='lightblue',bw=settings_entrance['hist_bw'], legend=False, lw=2, ax=ax)
                     plt.xlim(-1,0.5)
                     seaborn.kdeplot(z_ndwi_B, shade=True,vertical=False, color='orange',bw=settings_entrance['hist_bw'],legend=False, lw=2, ax=ax)               
-                    plt.axvline(x=np.nanpercentile(z_ndwi_B, settings_entrance['sand_percentile'] )  , color='orchid', linestyle='dotted', lw=2, alpha=1) 
-                    plt.text(np.nanpercentile(z_ndwi_B, settings_entrance['sand_percentile'] )   , 0.5 ,  str(settings_entrance['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_entrance['vhline_transparancy'])                                         
+                    plt.axvline(x=np.nanpercentile(z_nir_B, settings_entrance['sand_percentile'] )  , color='orchid', linestyle='dotted', lw=2, alpha=1) 
+                    plt.text(np.nanpercentile(z_nir_B, settings_entrance['sand_percentile'] )   , 0.5 ,  str(settings_entrance['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_entrance['vhline_transparancy'])                                         
                     plt.ylabel('Probability density', fontsize=settings_entrance['axlabelsize'])
                     plt.xlabel('NIR along A-D (lightblue) and C-D (orange) transect', fontsize=settings_entrance['axlabelsize'])     
                 if settings_entrance['path_index'] == 'index': 
@@ -1230,7 +1261,7 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     plt.axvline(x=img_ndwi_perc, color='orchid', linestyle='dotted', lw=2, alpha=1) 
                     plt.text(img_ndwi_perc , 0.5 ,  str(settings_entrance['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_entrance['vhline_transparancy'])                                         
                     plt.ylabel('Probability density', fontsize=settings_entrance['axlabelsize'])
-                    plt.xlabel(settings_entrance['path_index_id'] + ' index along A-D (lightblue) and C-D (orange) transect', fontsize=settings_entrance['axlabelsize'])                  
+                    plt.xlabel(settings_entrance['index_id'] + ' index along A-D (lightblue) and C-D (orange) transect', fontsize=settings_entrance['axlabelsize'])                  
 
                 fig.tight_layout() 
                 fig.savefig(image_out_path + '/' + filenames[i][:-4]  + '_' + settings_entrance['path_index'] +'_based_' +
@@ -1267,7 +1298,7 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     #plt.text(Intersection_coords[0]+2, Intersection_coords[1]+2,'X',horizontalalignment='left', color='cyan', fontsize=16)
                    
                 ax=plt.subplot(2,2,2) 
-                if settings_entrance['plot_tide_time_series'] & settings_entrance['tide_bool']:              
+                if settings_entrance['plot_tide_time_series'] & settings['use_fes_data']:              
                     #ax.set_title('Tide level at img aquisition = ' + img_tide +  ' [m aMSL]', fontsize=settings_entrance['axlabelsize'])
                     ax.grid(which='major', linestyle=':', color='0.5')
                     ax.plot(tides_df_ss.index, tides_df_ss['tide_level'], '-', color='0.6')
@@ -1283,16 +1314,16 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     ax.axis('off')
                     plt.xlim(Xmin-settings_entrance['img_crop_adjsut_Xax'], Xmax+settings_entrance['img_crop_adjsut_Xax'])
                     plt.ylim(Ymax + settings_entrance['img_crop_adjsut_Yax'],Ymin - settings_entrance['img_crop_adjsut_Yax']) 
-                    ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color='yellow')
-                    ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color='yellow')
-                    ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color='yellow')
-                    plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color='yellow' , fontsize=16)
-                    plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color='yellow', fontsize=16)               
-                    ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color='yellow')
-                    ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color='yellow')
-                    ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color='yellow')
-                    plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color='yellow' , fontsize=16)
-                    plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color='yellow', fontsize=16)                
+                    ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=settings_entrance['transect_color'])
+                    plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                    plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)               
+                    ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color=settings_entrance['transect_color'])
+                    plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                    plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)                
                     if len(Intersection_coords) >= 1:
                         ax.plot(Intersection_coords[0], Intersection_coords[1],"x", color='cyan', markersize=15, lw=1.5)        
                     if settings_entrance['plt_colorbars']:
@@ -1304,16 +1335,16 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     ax.axis('off')
                     plt.xlim(Xmin-settings_entrance['img_crop_adjsut_Xax'], Xmax+settings_entrance['img_crop_adjsut_Xax'])
                     plt.ylim(Ymax + settings_entrance['img_crop_adjsut_Yax'],Ymin - settings_entrance['img_crop_adjsut_Yax']) 
-                    ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color='yellow')
-                    ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color='yellow')
-                    ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color='yellow')
-                    plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color='yellow' , fontsize=16)
-                    plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color='yellow', fontsize=16)               
-                    ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color='yellow')
-                    ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color='yellow')
-                    ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color='yellow')
-                    plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color='yellow' , fontsize=16)
-                    plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color='yellow', fontsize=16)                
+                    ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=settings_entrance['transect_color'])
+                    plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                    plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)               
+                    ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color=settings_entrance['transect_color'])
+                    plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                    plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)                
                     if len(Intersection_coords) >= 1:
                         ax.plot(Intersection_coords[0], Intersection_coords[1],"x", color='cyan', markersize=15, lw=1.5)        
                     if settings_entrance['plt_colorbars']:
@@ -1325,16 +1356,16 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                     ax.axis('off')
                     plt.xlim(Xmin-settings_entrance['img_crop_adjsut_Xax'], Xmax+settings_entrance['img_crop_adjsut_Xax'])
                     plt.ylim(Ymax + settings_entrance['img_crop_adjsut_Yax'],Ymin - settings_entrance['img_crop_adjsut_Yax']) 
-                    ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color='yellow')
-                    ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color='yellow')
-                    ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color='yellow')
-                    plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color='yellow' , fontsize=16)
-                    plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color='yellow', fontsize=16)               
-                    ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color='yellow')
-                    ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color='yellow')
-                    ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color='yellow')
-                    plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color='yellow' , fontsize=16)
-                    plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color='yellow', fontsize=16)                
+                    ax.plot(pts_pix_interp[:,0], pts_pix_interp[:,1], 'r--', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp[0,0], pts_pix_interp[0,1],'ko', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp[-1,0], pts_pix_interp[-1,1],'ko', color=settings_entrance['transect_color'])
+                    plt.text(pts_pix_interp[0,0]+2, pts_pix_interp[0,1]+2,'A',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                    plt.text(pts_pix_interp[-1,0]+2, pts_pix_interp[-1,1]+2,'B',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)               
+                    ax.plot(pts_pix_interp_B[:,0], pts_pix_interp_B[:,1], 'r--', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp_B[0,0], pts_pix_interp_B[0,1],'ko', color=settings_entrance['transect_color'])
+                    ax.plot(pts_pix_interp_B[-1,0], pts_pix_interp_B[-1,1],'ko', color=settings_entrance['transect_color'])
+                    plt.text(pts_pix_interp_B[0,0]+2, pts_pix_interp_B[0,1]+2,'C',horizontalalignment='left', color=settings_entrance['transect_color'] , fontsize=16)
+                    plt.text(pts_pix_interp_B[-1,0]+2, pts_pix_interp_B[-1,1]+2,'D',horizontalalignment='left', color=settings_entrance['transect_color'], fontsize=16)                
                     if len(Intersection_coords) >= 1:
                         ax.plot(Intersection_coords[0], Intersection_coords[1],"x", color='cyan', markersize=15, lw=1.5)        
                     if settings_entrance['plt_colorbars']:
@@ -1408,11 +1439,20 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
 
 
 def bestThreshold(y_true,y_pred):
+    """
+    VH UNSW 2021
+        
+    takes a continuous input series of a given variable and a corresponding 'truth' binary series
+    this function then finds the threshold for classifying the input series into a binary series
+    so that the 'truth' series is matched with the highest level of accoracy, using the
+    f1 score as the metric. 
+    
+    """
+    
     thresh_df = pd.DataFrame(y_pred)
     thresh_df['clfd'] = 2
     best_thresh = None
     best_score = -1
-    #for thresh in [0.01,0.02,0.03,0.04,0.05,0.06,0.07,0.08, 0.09]:
     for thresh in np.arange(0.01, 0.2,  0.01):
         thresh_df['clfd'][thresh_df.iloc[:, 0] >= thresh] = 1
         thresh_df['clfd'][thresh_df.iloc[:, 0] < thresh] = 0      
@@ -1426,7 +1466,18 @@ def bestThreshold(y_true,y_pred):
  
  
 def calculateDeltaToMedian(XS_df, postprocess_params, calc_direction):
-    #this function creates a dataframe that has a date timeseries index and the delta-to-median parameter as values
+    """
+    VH UNSW 2021
+      
+    EntranceSat specific function that calculates the delta-to-median parameter from the full spectral transects 
+    generated by the automated_entrance_paths function
+    
+    key parameters for this step are defined in the postprocess_params dict. 
+    
+    returns:
+        dataframe that has a date timeseries index and the delta-to-median parameter as values
+    
+    """  
     
     #subset the full result dataframe to the spectral index desired for analysis and also either AB or XB analysis direction
     df2 = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + calc_direction).dropna()
@@ -1485,6 +1536,14 @@ def calculateDeltaToMedian(XS_df, postprocess_params, calc_direction):
     
 
 def setup_classification_df(XS_df, Training_data_df,postprocess_params):   
+    """
+    VH UNSW 2021
+      
+    Prepares a dataframe for binary classification from the full XS_df that contains
+    the spectral transects for NIR, SWIR1, NDWI and mNDWI, based on the parameters selected in 
+    the postprocess_params dict. 
+    
+    """  
     
     #Divide processed data into open and closed 
     XS_o_df = pd.DataFrame()
@@ -1518,7 +1577,14 @@ def setup_classification_df(XS_df, Training_data_df,postprocess_params):
 
 
 def classify_image_series_via_DTM(XS_df, analysis_direction, DTM_threshold, postprocess_params):
- 
+    """
+    VH UNSW 2021
+      
+    Classifies the full time series of spectral transects generated by automated_entrance_paths into binary
+    entrance states (open vs. closed) based on the delta-to-median (DTM) threshold 
+    
+    """  
+    
     #classify the full processed image series into open vs. closed binary entrance states
     XS_sums_df = pd.DataFrame(calculateDeltaToMedian(XS_df, postprocess_params, analysis_direction)).dropna()
     
@@ -1545,7 +1611,14 @@ def classify_image_series_via_DTM(XS_df, analysis_direction, DTM_threshold, post
 
 
 def show_detection(postprocess_out_path, date, entrance_state_str): 
-                     
+    """
+    VH UNSW 2021
+      
+    Function that brings up a popup window showing the dashboard overview plots created by automated_entrance_paths 
+    along with the automatically inferred binary entrance state, for the user to quality control the detection. 
+    Users can then either keep or drop a given detection. 
+    
+    """                   
     skip_image = False
     
     img1  =  glob.glob(postprocess_out_path +  '/auto_transects/' +  date  +  '*.png' )[0]
@@ -1618,7 +1691,14 @@ def show_detection(postprocess_out_path, date, entrance_state_str):
 
 
 def check_entrance_state_detection(postprocess_out_path, XS_DTM_classified_df): 
-
+    """
+    VH UNSW 2021
+      
+    Function that loops through all classified images and then calls the show_detection function to bring up the 
+    pop up window for quality control. 
+    
+    """   
+    
     # initialise output data as dict
     XS_DTM_clfd_quality_contrd={}
     
@@ -1645,7 +1725,14 @@ def check_entrance_state_detection(postprocess_out_path, XS_DTM_classified_df):
 
 
 def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, postprocess_params, metadata,  figure_out_path):
+    """
+    VH UNSW 2021
+      
+    Function that creates three plots from the results of the EntranceSat processing chain. 
 
+    
+    """  
+    
     #Fully automated part of the plot function    
     plt.style.use('classic')  
     
@@ -1676,7 +1763,11 @@ def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, post
     direction = 'XB'
     
     # row 1 pos 2   ################################################################################  
-    Loopimage_c_date = XS_c_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
+    try:
+        Loopimage_c_date = XS_c_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
+    except: 
+        Loopimage_c_date = XS_o_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
+        print('no closed image was available for [satname_img] - open image will be plotted instead')
     r = re.compile(".*" + Loopimage_c_date)    
     #combined_df.filter(regex=Gauge[3:]+'_')
     fn = SDS_tools.get_filenames(list(filter(r.match, filenames))[0],filepath, postprocess_params['satname_img'])
@@ -1761,9 +1852,13 @@ def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, post
     #################################### 
             
     # row 1 pos 2   ################################################################################         
-    Loopimage_c_date = XS_o_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns[0][:19]
+    try:
+        Loopimage_c_date = XS_o_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns[0][:19]
+    except: 
+        Loopimage_c_date = XS_c_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
+        print('no open image was available for [satname_img] - closed image will be plotted instead')
+    
     r = re.compile(".*" + Loopimage_c_date)    
-    #combined_df.filter(regex=Gauge[3:]+'_')
     fn = SDS_tools.get_filenames(list(filter(r.match, filenames))[0],filepath, postprocess_params['satname_img'])
     #print(fn)
     im_ms, georef, cloud_mask, im_extra, im_QA, im_nodata = SDS_preprocess.preprocess_single(fn, postprocess_params['satname_img'], settings['cloud_mask_issue'])
@@ -1920,7 +2015,7 @@ def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, post
     XS_co_sums_AB_df = XS_c_sums_AB_df.append(XS_o_sums_AB_df )
     
     ax=plt.subplot(2,1,1)  
-    XS_co_sums_AB_df.plot(color='grey', style='--',lw=1.2, alpha=0.8, ax=ax) 
+    XS_co_sums_AB_df.plot(color='grey', style='--',lw=0.8, alpha=0.8, ax=ax) 
     XS_c_sums_AB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],   ax=ax)
     XS_o_sums_AB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)       
     plt.ylim(-0.1,XS_o_sums_AB_df.max().max())
@@ -1936,7 +2031,7 @@ def plot_entrancesat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, post
     XS_co_sums_XB_df = XS_c_sums_XB_df.append(XS_o_sums_XB_df)
     
     ax=plt.subplot(2,1,2)
-    XS_co_sums_XB_df.plot(color='grey', style='--',lw=0.4, alpha=0.8, ax=ax)
+    XS_co_sums_XB_df.plot(color='grey', style='--',lw=0.8, alpha=0.8, ax=ax)
     XS_c_sums_XB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],  ax=ax)
     XS_o_sums_XB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)
     plt.ylim(-0.1,XS_o_sums_AB_df.max().max())
@@ -2023,7 +2118,17 @@ def compute_tide_dates(coords,dates,ocean_tide,load_tide):
 
   
 def load_FES_tide(settings, sat_list, metadata):
+    """
+    VH UNSW 2021
+      
+    Function that drills into the FES2014 global tide model reanalysis dataset, based on the location of seed point A
+    in the input shapefile, extracts the tide data and then creates two pandas dataframes with that tide information
     
+    returns:
+        sat_tides_df = dataframe containing the name of each satellite image along with the tide level at the time of image capture
+        tides_df  = dataframe containing the 15-min interval tide data for the user-defined analysis period. 
+    
+    """  
     import pyfes
     import pytz
     from datetime import datetime

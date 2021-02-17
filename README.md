@@ -81,18 +81,17 @@ Importantly, the FES2014 tide levels are provided to the user but it is not curr
 	How to install fbriol fes (the FES2014 global tide model) in a python environment:
 
 	1. Download the source folder from here: https://bitbucket.org/fbriol/fes/downloads/ - unzip it and store in any preferred location outside of your EntranceSat repository folder.
-	2. With the entrancesat environment activated in the annaconda command propmt, run: `conda install -c fbriol fes` #this works without step 1
-	3. Test `import pyfes` in python
-	4. Acquire/download the actual model data via Netcdf files provided separately. These Netcdf files include **ocean tide**, **ocean_tide_extrapolated** and **load tide** .nc and are provided through the Aviso+ servers
+	2. Test `import pyfes` in python (this should work because pyfes was installed via the environment.yml file). If this doesn't work yet: With the entrancesat environment activated in the annaconda command propmt, run: `conda install -c fbriol fes` #this works without step 1
+	3. Acquire/download the actual model data via Netcdf files provided separately. These Netcdf files include **ocean tide**, **ocean_tide_extrapolated** and **load tide** .nc and are provided through the Aviso+ servers
 	as explained here https://bitbucket.org/fbriol/fes/src/master/README.md.
 	These are large (8gb+) Netcdf files that contain all the results from the global tide model. They are not included in the installation of pyfes and therefore, have to be downloaded separately and placed in the correct directory locations.
-	5. Save the .nc files in the source folder, under /data/fes2014 (e.g. data\fes2014\ocean_tide_extrapolated\).
-	6. When using fes in python, it will look for these files in the source folder, but the filepaths to each file have to be provided explicitly (manually) in the ocean_tide_extrapolated.ini file. Update the ocean_tide_extrapolated.ini file to include the absolute path to each tidal component (.nc file)
-	7. When using EntranceSat via the EntranceSat_master.py code, set the path to where you unzipped the fbriol source folder in the general 'settings'. e,g, 'filepath_fes' : r"H:\Downloads\fes-2.9.1-Source\data\fes2014". This filepath is used to tell pyfes where to look for the ocean_tide_extrapolated.ini file.
-	8. Lastly, to integrate the FES2014 data in EntranceSat, ensure to set the following parameter to true in the settings: 'use_fes_data': True
+	4. Save the .nc files in the source folder, under /data/fes2014 (e.g. ...\data\fes2014\ocean_tide_extrapolated\).
+	5. When using fes in python, it will look for these files in the source folder, but the filepaths to each file have to be provided explicitly (manually) in the ocean_tide_extrapolated.ini file. Update the ocean_tide_extrapolated.ini file to include the absolute path to each tidal component (.nc file)
+	6. When using EntranceSat via the EntranceSat_master.py code, set the path to where you unzipped the fbriol source folder in the general 'settings'. e,g, 'filepath_fes' : r"H:\Downloads\fes-2.9.1-Source\data\fes2014". This filepath is used to tell pyfes where to look for the ocean_tide_extrapolated.ini file.
+	7. Lastly, to integrate the FES2014 data in EntranceSat, ensure to set the following parameter to true in the settings: 'use_fes_data': True
 
 
-**Note**: If setup of FES2014 creates any issues, you can always run EntranceSat without this data via setting 'use_fes_data' to False in 'settings'. Alternatively, the sat_tides_df and tides_df pandas timeseries data frames can be created manually by the user from other sources of tide data. Examples of these dataframes are provided in the EntranceSat example.
+**Note**: If setup of FES2014 creates any issues, you can always run EntranceSat without this data via setting 'use_fes_data' to False in 'settings'.
 
 
 
@@ -104,7 +103,7 @@ Importantly, the FES2014 tide levels are provided to the user but it is not curr
 
 All user input files (area of interest polygon, transects & tide data) are kept in the folder ".../Entrancesat/user_inputs"
 
-It is recommended that new analysis regions/ IOCEs are added directly to the input_locations.shp file located in this directory via QGIS or ArcGIS. For each site, EntranceSat expects 8 polygons as shown in this example. In the attribute table of this shapefile, each of these 8 unique polygons has to be named accordingly in the 'layer' field. Each polygon also requires the sitename in the 'sitename' field.
+It is recommended that new analysis regions/ IOCEs are added directly to the input_locations.shp file located in this directory via QGIS or ArcGIS. For each site, EntranceSat expects 7 polygons as shown in this example. In the attribute table of this shapefile, each of these 7 unique polygons has to be named accordingly in the 'layer' field ('full_bounding_box', 'A-B Mask', 'C-D Mask', 'B', 'A', 'D', 'C'). Note that the 'estuary_area' polygon is not required at this stage. Each polygon also requires the sitename in the 'sitename' field.
 
 ![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/EntranceSat%20site%20setup%20illustration.jpg)
 
