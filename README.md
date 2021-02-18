@@ -45,7 +45,7 @@ Create a new environment named `entrancesat` with all the required packages:
 conda env create -f environment.yml -n entrancesat
 ```
 
-All the required packages have now been installed in an environment called `entrancesat`. Now, activate the new environment:
+You might have to hit 'enter' here at some point and this whole step can take upwards of 10 mins. All the required packages have now been installed in an environment called `entrancesat`. Now, activate the new environment:
 
 ```
 conda activate entrancesat
@@ -113,6 +113,7 @@ Points A and C are the seed points for the automated tracing of the across-berm 
 
 The A-B and C-D masks are used for limiting the area for least-cost pathfinding to within those polygons. The location of the seed and receiver points and shape of these masks can significantly affect the performance of the pathfinding and it is recommended to play around with these shapes initially by doing test runs based on a limited number of images until satisfactory performance is achieved.
 
+**Important**: It is recommended to limit the A-B mask in a way so that both points C and D are outside of that mask. That way, there will always be an intersection between the along-berm and across-berm transects.
 
 ### Running the tool in python
 
@@ -120,6 +121,10 @@ It is recommended the toolkit be run in spyder. Ensure spyder graphics backend i
 - Preferences - iPython console - Graphics - Graphics Backend - Automatic
 
 EntranceSat is run from the EntranceSat_master.py file.
+- With the entrancesat environment activated, in the Conda command prompt, type spyder
+- Set the EntranceSat folder/directory as the working subdirectory
+- Open the EntranceSat_master.py file
+- You are now ready to execute this code line by line or in blocks.
 - Instructions and comments are provided in this file for each step.
 - It is recommended steps be run as individual cells for first time users. For each cell/processing step, first ensure that all parameters are set correctly and then run the cell via Ctrl + Enter.
 
@@ -135,8 +140,8 @@ Use 'skip' if the image is cloudy or otherwise of poor quality. User 'unclear' i
 
 ![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/training_data_generator.png)
 
-#### Step 3: Load tide data
-Generate tide time series (if use_fes_data = True). In this step, EntranceSat uses the location of seed point A to query into the FES2014 tide reanalysis data and extract tide water levels for the entire analysis period. Two pandas dataframes are created from this data. sat_tides_df contains the tide level for each image along with the name of the image. tides_df contains a 15min timestep tide time series for the full analysis period.  
+#### Step 3: Load tide data (optional)
+Generate tide time series (if use_fes_data is set to True in 'settings' dict). In this step, EntranceSat uses the location of seed point A to query into the FES2014 tide data and extract tide water levels for the entire analysis period. Two pandas dataframes are created from this data. sat_tides_df contains the tide level for each image along with the name of the image. tides_df contains a 15min timestep tide time series for the full analysis period.  
 
 #### Step 4: Least-cost path finding
 This step is the least-cost path finding step, which is the core step of the EntranceSat algorithm. This will process all downloaded images that have less than the user defined threshold of cloud cover over the across-berm mask. For each image, the least-cost path finding algorithm is run and the core bands and spectral indices are then extracted along those transects as input to the second major analysis step. Most of the input parameters to the SDS_entrance.automated_entrance_paths function (settings_entrance) don't need to be changed. The first 8 parameters should be considered more carefully since they have significant impact on the results. The most important parameter here is 'path_index', which defines which band or index will be used as the cost surface for least-cost path finding. Guidance on selecting the most suitable option for this is provided in the aforementioned journal paper. All other parameters can initially be left unchanged.

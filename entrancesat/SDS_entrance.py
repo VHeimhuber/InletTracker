@@ -413,10 +413,10 @@ def create_training_data(metadata, settings, settings_training):
     Training={}
        
     # create a subfolder to store the .jpg images showing the detection + csv file of the generated training dataset
-    csv_out_path = os.path.join(filepath_data, sitename, 'User_validation_data')
+    csv_out_path = os.path.join(filepath_data, sitename, 'user_validation_data')
     if not os.path.exists(csv_out_path):
             os.makedirs(csv_out_path)   
-    jpg_out_path =  os.path.join(filepath_data, sitename, 'User_validation_data' , settings_training['username'] + '_jpg_files')     
+    jpg_out_path =  os.path.join(filepath_data, sitename, 'user_validation_data' , settings_training['username'] + '_jpg_files')     
     if not os.path.exists(jpg_out_path):      
         os.makedirs(jpg_out_path)
     
@@ -713,6 +713,9 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
             path_B = np.zeros_like(costSurfaceArray)
             path_B[indices_B.T[1], indices_B.T[0]] = 1
            
+            if settings_entrance['use_straight_lines']:
+                indices_B = np.array([indices_B[0], indices_B[-1]])
+   
             # geospatial processing of the least cost path including coordinate transformations and splitting the path into intervals of 1m
             geoms_B = []
             # convert pixel coordinates to world coordinates
@@ -741,6 +744,8 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
             geoms_B.append(geometry.LineString(pts_world_interp_reproj_B))        
             
             #extract spectral indices along the digitized line.
+            
+            #setup the nd arrays for the bands and indices
             im_mndwi = SDS_tools.nd_index(im_ms[:,:,4], im_ms[:,:,1], cloud_mask)           
             im_ndwi = SDS_tools.nd_index(im_ms[:,:,3], im_ms[:,:,1], cloud_mask) 
             im_swir = im_ms[:,:,4]
@@ -759,6 +764,7 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                 im_bathy_sdb = im_ms[:,:,1] - (im_ms[:,:,1] / im_ms[:,:,2])            
             im_bathy_sdb[cloud_mask] = np.nan
             
+            #extract values along the transects. 
             z_mndwi_B = scipy.ndimage.map_coordinates(im_mndwi, np.vstack((pts_pix_interp_B[:,1], pts_pix_interp_B[:,0])),order=1)
             z_ndwi_B = scipy.ndimage.map_coordinates(im_ndwi, np.vstack((pts_pix_interp_B[:,1], pts_pix_interp_B[:,0])),order=1)
             z_swir_B = scipy.ndimage.map_coordinates(im_swir, np.vstack((pts_pix_interp_B[:,1], pts_pix_interp_B[:,0])),order=1)
@@ -781,6 +787,9 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
             indices = list(map(lambda sub: (sub[1], sub[0]), indices))
             indices = np.array(indices)
             
+            if settings_entrance['use_straight_lines']:
+                indices = np.array([indices[0], indices[-1]])
+                
             #create indexed raster from indices
             path = np.zeros_like(costSurfaceArray)
             path[indices.T[1], indices.T[0]] = 1
@@ -894,7 +903,7 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                   
             if settings_entrance['plot_bool']:                          
                 #setup the figure
-                fig = plt.figure(figsize=(40,30)) 
+                fig = plt.figure(figsize=(40,30), dpi=100) 
                 
                 #plot RGB image
                 ax=plt.subplot(4,3,3)
@@ -1272,7 +1281,7 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
     
             if settings_entrance['animation_plot_bool']:                          
                 #setup the figure
-                fig = plt.figure(figsize=(17,10)) 
+                fig = plt.figure(figsize=(17,10), dpi=100) 
                 
                 #plot RGB image
                 ax=plt.subplot(2,2,1)
@@ -1415,11 +1424,9 @@ def automated_entrance_paths(metadata, settings, settings_entrance, tides_df , s
                 if not os.path.exists(anim_image_out_path):
                         os.makedirs(anim_image_out_path) 
             
-                fig.savefig(anim_image_out_path + '/' + filenames[i][:-4]  + '_' + settings_entrance['path_index'] +'_based_' +
-                            'ABexp_ ' + str(settings_entrance['AB_cost_raster_amp_exponent']) + '_XBexp_ ' + 
-                            str(settings_entrance['XB_cost_raster_amp_exponent']) +  '.png') 
+                fig.savefig(anim_image_out_path + '/' + filenames[i][:-4]  + '_' + settings_entrance['path_index'] + '.png') 
                 plt.close() 
-                
+                                
                     
     #gdf_all.crs = {'init':'epsg:'+str(image_epsg)} # looks like mistake. geoms as input to the dataframe should already have the output epsg. 
     gdf_all.crs = {'init': 'epsg:'+ str(settings['output_epsg'])}

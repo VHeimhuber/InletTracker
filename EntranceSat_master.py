@@ -15,7 +15,7 @@ import glob
 import pickle
 
 # filepath where data will be stored
-filepath_data = os.path.join('H:/WRL_Projects/Estuary_sat_data/', 'data') #user input required | change this path to the location where you want to store the data (can be outside of ../Entrencesat)
+filepath_data = os.path.join(os.getcwd(), 'data') #user input required | change this path to the location where you want to store the data (can be outside of ../Entrencesat)
 
 #sitename as specified in the input input_locations.shp
 sitename = 'DURRAS' #user input required
@@ -23,7 +23,7 @@ site_shapefile_name = 'input_locations.shp' #user input required | change this i
 
 #this parameter is used to distinguish progressive 'sets' of analysis that may be based on different seed and receiver point configurations
 #note that within this set of results, a unique directory is created for each path finding index
-Analysis_version = 'PV3'   #user input required
+Analysis_version = 'V1'   #user input required
 
 # date range for analysis
 dates = ['1985-01-01', '2020-11-01']   #user input required
@@ -138,7 +138,8 @@ settings_entrance =  {
     'cloud_cover_ROIonly' : True ,         #discard images based on cloud cover over the entrance area only instead of cloud cover over whole image/lagoon
     'use_berm_mask_for_AB' : True,         #use a separate mask for along berm path finding - recommended if there is vegetation around the entrance
     'number_of_images':2000,               #nr of images to process - if it exceeds len(images) all images will be processed. Applied to each satellite so 5 -> 20 images processed
-        
+    'use_straight_lines': False,             # insead of path finding, simply use a straightline, which might be useful for application not concerned with coastal entrances   
+            
     #processing troubleshooting
     #sometimes specific images may cause the code to crash. If that image nr is included here it will be skipped when you rerun the algorithm 
     'skip_img_L8': [0],                   
@@ -207,17 +208,15 @@ postprocess_params = {
     
     # other parameters - do not have to be changed
     'satnames' : satnames,                      #these satellites are included in postprocessing. This variable is defined at the top of this script. 
-    'satnames_string' : satnames_string,
+    'satnames_string' : satnames_string,        #inherited from initial settings
     
     # plotting parameters - do not have to be changed
     'closed_color' : 'orangered',
     'open_color' : 'royalblue',
     'xaxisadjust' : 0,
-
-    'satnames_XS' : satnames, #plot spectral transects for these satellites
-    'satname_img' : 'S2',  #use this satellite for an illustration RGB image - typically S2
-    'Interpolation_method' : "bicubic", # interpolate the RGB images for illustration - choose between "None" #"bicubic" 
-    
+    'satnames_XS' : satnames, #plot spectral transects for these satellites | inherited from initial settings
+    'satname_img' : 'S2',  #use this satellite for an illustration RGB image - typically S2 | requires for this satellite to be downloaded as imagery
+    'Interpolation_method' : "bicubic", # interpolate the RGB images for illustration - choose between "None" #"bicubic"
     'linestyle' : ['-', '--', '-.'],
     'labelsize' : 18,
     'linewidth' : 2 ,
@@ -230,7 +229,7 @@ postprocess_params = {
 #define data input and figure output paths
 postprocess_out_path = os.path.join(filepath_data, sitename,  'results_' + settings['inputs']['analysis_vrs'], 'XB' + str(settings_entrance['XB_cost_raster_amp_exponent']) + 
                                 '_AB' + str(settings_entrance['AB_cost_raster_amp_exponent']) + '_' + settings_entrance['path_index'])
-figure_out_path = os.path.join(postprocess_out_path,'Analyzed_for_' + postprocess_params['satnames_string'] + '_' + postprocess_params['spectral_index']  + '_' +  postprocess_params['Postprocessing_version'])
+figure_out_path = os.path.join(postprocess_out_path,'analyzed_for_' + postprocess_params['satnames_string'] + '_' + postprocess_params['spectral_index']  + '_' +  postprocess_params['Postprocessing_version'])
 
 #create directories if they do not already exist
 if not os.path.exists(postprocess_out_path ):
@@ -252,7 +251,7 @@ XS_gdf = pickle.load(infile)
 infile.close()
 
 #load training data into dataframe
-Training_data_df  =  pd.read_csv(glob.glob(os.path.join(filepath_data, sitename) + '/User_validation_data/*' +  '*training*' +  settings_training['username'] +  '.csv' )[0], index_col=0) 
+Training_data_df  =  pd.read_csv(glob.glob(os.path.join(filepath_data, sitename) + '/user_validation_data/*' +  '*training*' +  settings_training['username'] +  '.csv' )[0], index_col=0) 
 Training_data_df = Training_data_df[~Training_data_df.index.duplicated(keep='first')] #remove possible duplicate entries. 
 
 
@@ -291,8 +290,6 @@ else:
 #classify the full image series based on the best performing analysis direction and corresponding threshold
 XS_DTM_classified_df = SDS_entrance.classify_image_series_via_DTM(XS_df, Analysis_direction, DTM_threshold, postprocess_params)
 
-len(XS_DTM_classified_df['bin_entrance_state'])
-len(Classification_df['user_entrance_state'])
 
 #%% ######################
 #5.3 Check detection

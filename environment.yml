@@ -9,7 +9,7 @@ dependencies:
   - pillow=6.2.1
   - earthengine-api=0.1.236
   - gdal=2.3.3
-  - pandas=0.24.2
+  - pandas=1.1.3=py37ha925a31_0
   - geopandas=0.4.1
   - pytz=2020.1
   - scikit-image=0.15.0
