@@ -111,11 +111,11 @@ The full_bounding_box polygon is used for selecting and cropping of the satellit
 
 Points A and C are the seed points for the automated tracing of the across-berm and along-berm paths. B and D are the receiver points. A to B is the across-berm path. C to D is the along-berm path. In the shapefile, points A to D should be built as very small triangles. The first point of this triangle is used as seed/receiver point during analysis. This is a workaround since shapefiles cannot contain polygons and points at the same time.
 
-Critical: Points C and D need to be spaced far enough apart so that the resulting least-cost path between them is at least double as long as the widest entrance opening you expect for a site. This is necessary so that the median of the C-D transect during a large opening still matches the reflectance of dry sand areas along the path. If it's too short, the median might drop and the method will fail. 
-
 The A-B and C-D masks are used for limiting the area for least-cost pathfinding to within those polygons. The location of the seed and receiver points and shape of these masks can significantly affect the performance of the pathfinding and it is recommended to play around with these shapes initially by doing test runs based on a limited number of images until satisfactory performance is achieved.
 
-**Important**: It is recommended to limit the A-B mask in a way so that both points C and D are outside of that mask. That way, there will always be an intersection between the along-berm and across-berm transects.
+**Important**:
+- It is recommended to limit the A-B mask in a way so that both points C and D are outside of that mask. That way, there will always be an intersection between the along-berm and across-berm transects.
+- Points C and D need to be spaced far enough apart so that the resulting least-cost path between them is at least double as long as the widest entrance opening you expect for a site. This is necessary so that the median of the C-D transect during a large opening still matches the reflectance of dry sand areas along the path. If the path is too short relative to the opening, the median might drop and the method will fail.
 
 ### Running the tool in python
 
@@ -181,14 +181,20 @@ This is a quality control step. Here, the user has the ability to go over every 
 
 By running the SDS_entrance.plot_entrancesat_results function, a number of output datasets are generated and stored in a dedicated directory. These outputs include:
 
--Location plots of the identified least cost paths:
+-Location plots of the identified least cost paths. This plot shows all of the paths obtained via least-cost path finding for open and closed entrance states separately. This gives users an idea of the spatial dynamics of the entrance and the beach berm.
 ![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_1_mndwi_15-02-2021_L5_L7_L8_S2.png)
--Spectral Transect plots:
+
+-Spectral Transect plots. These plots show the spectral index extracted along all of the open and closed along-berm and across-berm transects. These give users an overview of the variability in the size and location of the entrance opening. If the full satellite record is chosen for these plots, they tend to get overcrowded and it is recommended to limit the number of satellites or the analysis period for illustration purposes.
 ![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_2_mndwi_15-02-2021_L5_L7_L8_S2.png)
--Time series plots of the delta to median parameter:
+
+-Time series plots of the delta to median parameter. These are perhaps the most important result plots, since they show the delta-to-median parameter, which is strongly reflective of the state of an entrance over time. Using blue vs. orange color coding, the plot also shows the result of the binary entrance state classification.
 ![Alt text](https://github.com/VHeimhuber/EntranceSat/blob/main/readme_files/Figure_3_mndwi_15-02-2021_L5_L7_L8_S2.png)
--CSV files with all the processed data.
+
+-CSV files with all the processed data. All of the data shown in the above plots is provided here.
 -Shapefile containing all of the least-cost paths corresponding to open entrances.
 
 
 That's it - you have now successfully used the EntranceSat toolbox to analyse the entrance state of an intermittent estuary or a similar landform.
+
+
+**Licensing**:  If you intend to use EntranceSat for research or commercial purposes, please provide an appropriate reference to the aforementioned research paper as well as this Github repository. Thank you! 
