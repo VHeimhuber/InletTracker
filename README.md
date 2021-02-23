@@ -99,7 +99,7 @@ Importantly, the FES2014 tide levels are provided to the user but it is not curr
 
 ## **Using EntranceSat**
 
-### Setting up the algorithm for processing a new estuary entrance site
+### Setting up the algorithm for processing a new entrance site
 
 All user input files (area of interest polygon, transects & tide data) are kept in the folder ".../Entrancesat/user_inputs"
 
@@ -110,6 +110,8 @@ It is recommended that new analysis regions/ IOCEs are added directly to the inp
 The full_bounding_box polygon is used for selecting and cropping of the satellite imagery from the Google Earth Engine. This does not necessarily have to incorporate the entire estuary water body. The area of this polygon should not exceed 100 km2.
 
 Points A and C are the seed points for the automated tracing of the across-berm and along-berm paths. B and D are the receiver points. A to B is the across-berm path. C to D is the along-berm path. In the shapefile, points A to D should be built as very small triangles. The first point of this triangle is used as seed/receiver point during analysis. This is a workaround since shapefiles cannot contain polygons and points at the same time.
+
+Critical: Points C and D need to be spaced far enough apart so that the resulting least-cost path between them is at least double as long as the widest entrance opening you expect for a site. This is necessary so that the median of the C-D transect during a large opening still matches the reflectance of dry sand areas along the path. If it's too short, the median might drop and the method will fail. 
 
 The A-B and C-D masks are used for limiting the area for least-cost pathfinding to within those polygons. The location of the seed and receiver points and shape of these masks can significantly affect the performance of the pathfinding and it is recommended to play around with these shapes initially by doing test runs based on a limited number of images until satisfactory performance is achieved.
 
