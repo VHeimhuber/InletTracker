@@ -13,17 +13,18 @@ from coastsat import SDS_download
 import pandas as pd
 import glob
 import pickle
+from datetime import datetime
 
 # filepath where data will be stored
 filepath_data = os.path.join(os.getcwd(), 'data') #user input required | change this path to the location where you want to store the data (can be outside of ../Entrencesat)
 
 #sitename as specified in the input input_locations.shp
-sitename = 'CATHIE' #user input required
+sitename = 'DURRAS' #user input required
 site_shapefile_name = 'input_locations.shp' #user input required | change this if a new shapefile was created with the site configurations
 
 #this parameter is used to distinguish progressive 'sets' of analysis that may be based on different seed and receiver point configurations
 #note that within this set of results, a unique directory is created for each path finding index
-Analysis_version = 'O1'   #user input required
+Analysis_version = 'V1'   #user input required
 
 # date range for analysis
 dates = ['1985-01-01', '2021-12-01']   #user input required
@@ -31,13 +32,8 @@ dates = ['1985-01-01', '2021-12-01']   #user input required
 # satellite missions
 sat_list = ['L5','L7','L8','S2'] #user input required
 
-satnames = '|'.join(sat_list)
-satnames_string = '_'.join(sat_list)
-
-
 #load shapefile that contains specific shapes for each ICOLL site as per readme file
 Site_shps, layers, BBX_coords = InletTracker_tools.load_shapes(site_shapefile_name, sitename)
-
       
 # put all the inputs into a dictionnary
 inputs = {
@@ -50,8 +46,8 @@ inputs = {
     'analysis_vrs' : Analysis_version
         }
 
-# retrieve satellite images from GEE 
-#metadata = SDS_download.retrieve_images(inputs) #user input required (hash this line only if you have already downloaded the data)
+# retrieve satellite images from GEE (run only once!)
+metadata = SDS_download.retrieve_images(inputs) #user input required (hash this line only if you have already downloaded the data)
 
 # if you have already downloaded the images, just load the metadata file
 metadata = SDS_download.get_metadata(inputs) 
@@ -59,7 +55,7 @@ metadata = SDS_download.get_metadata(inputs)
 # general settings
 settings = { 
     # general parameters:
-    'cloud_thresh': 0.05,        # threshold on maximum cloud cover
+    'cloud_thresh': 0.1,        # threshold on maximum cloud cover
     'output_epsg': 3577,       # epsg code of spatial reference system desired for the spatial output files
     'shapefile_EPSG' : 4326,     #epsg of shapefile containing sites and path finding seed and receiver points
     'use_fes_data': False,      # if the FES model was installed sucessfully, choose whether to include it in the analysis (True) or not (False). 
@@ -88,7 +84,7 @@ It is recommended to:
 settings_training =  { # set parameters for training data generation
                     'shuffle_training_imgs':True,   # if True, images during manual/visual detection of inlet states are shuffled (in time) to provide a more independent sample
                     'save_figure': True,        # if True, saves a figure for each trained image     
-                    'username' : 'InletSat', # in case multiple analysts create training data or one analyst creating multiple training datasets, this can be used as a distinguishing variable.
+                    'username' : 'InletTracker_1', # in case multiple analysts create training data or one analyst creating multiple training datasets, this can be used as a distinguishing variable.
                       }
 
 # only rerun this step if you have not already generated a set of training data (i.e., only run once)
@@ -131,14 +127,16 @@ This is the major automated processing step of the algorithm consisting of:
 settings_inlet =  {   
                   
     #key algorithm parameters
-    'path_index': 'swir',                   #band/index used for pathfinding
-    'sand_percentile': 50 ,                #percentile of sand to plot in addition to 10th, 20th and 30th (which are always done)
+    'path_index': 'mndwi',                   #band/index used for pathfinding | options are ndwi, mndwi, swir, nir !! do not capitalize !! 
+    'sand_percentile': 50 ,                #percentile of sand to plot - this is later used to calculate the delta to median parameter
     'XB_cost_raster_amp_exponent': 25,     #The cost raster based on 'path_index' will be exponentiated with this factor before path finding across berm
     'AB_cost_raster_amp_exponent': 25,     #The cost raster based on 'path_index' will be exponentiated with this factor before path finding along berm
     'cloud_cover_ROIonly' : True ,         #discard images based on cloud cover over the inlet area only instead of cloud cover over whole image/lagoon
     'use_berm_mask_for_AB' : True,         #use a separate mask for along berm path finding - recommended if there is vegetation around the inlet
     'number_of_images':2000,               #nr of images to process - if it exceeds len(images) all images will be processed. Applied to each satellite so 5 -> 20 images processed
-    'use_straight_lines': False,             # insead of path finding, simply use a straightline, which might be useful for application not concerned with coastal inlets   
+    'XB_use_straight_line': False,             # insead of path finding, simply use a straightline for across berm (A to B), which might be useful for application not concerned with coastal inlets   
+    'AB_use_straight_line': False,             # insead of path finding, simply use a straightline for along berm (C to D), which might be useful for application not concerned with coastal inlets   
+     
             
     #processing troubleshooting
     #sometimes specific images may cause the code to crash. If that image nr is included here it will be skipped when you rerun the algorithm 
@@ -164,6 +162,7 @@ settings_inlet =  {
     'fontsize' : 25 ,      #10            #size of fonts in plot
     'labelsize' :40   ,       #26          #size of text lables
     'axlabelsize': 20 ,                   #sie of axis labels    
+    'transect_linewidth': 2.7,              #width of the spectral trasect lines 
     
     #plotting parameters for an additional, simpler output plot that is good for creating animations or illisrations
     'animation_plot_bool': True,          #output a second set of plots with a simpler plot layout and fewer windows useful for animations
@@ -172,10 +171,8 @@ settings_inlet =  {
     'img_crop_adjsut_Yax': 10
     }
 
-# run this function only if the current path finding settings haven't been processed yet (i.e., run only once)
-#InletTracker_tools.automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tides_df)
-
-
+# run this function only if the current path finding settings haven't been processed yet (i.e., run only once for each spectral index)
+InletTracker_tools.automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tides_df)
 
 
 
@@ -205,17 +202,16 @@ postprocess_params = {
     'metric_percentile' : 0.5 ,                 #which percentile to use for 'delta to median' parameter. Typically recommended to be 0.5, which is the median.  
     'AB_intersection_search_distance' : 100,    #window on either side of the AB intersection to limit the calculation of the area under the Xth percentile | should be bit bigger than the max width of the inlet
     'XB_intersection_search_distance' : 100,    #window on either side of the XB intersection to locate maximum (m)NDWI in the area of the channel bottleneck.
-    
-    # other parameters - do not have to be changed
-    'satnames' : satnames,                      #these satellites are included in postprocessing. This variable is defined at the top of this script. 
-    'satnames_string' : satnames_string,        #inherited from initial settings
-    
+    'sat_list_pp' :  ['L5','L7','L8','S2'],      #these satellites are included in postprocessing.
+    'startdate' :  '1985-01-01',
+    'enddate' : '2022-01-01',
+
     # plotting parameters - do not have to be changed
-    'closed_color' : 'orangered',
-    'open_color' : 'royalblue',
-    'xaxisadjust' : 0,
-    'satnames_XS' : satnames, #plot spectral transects for these satellites | inherited from initial settings
-    'satname_img' : 'S2',  #use this satellite for an illustration RGB image - typically S2 | requires for this satellite to be downloaded as imagery
+    'closed_color' : 'orangered',           #color used for plotting closed inlet states
+    'open_color' : 'royalblue',             #color used for plotting open inlet states
+    'xaxisadjust' : 0,                      
+    'sat_list_Fig1' : ['L8'], #plot the spatial transects for these satellites in Figure 1 (plotting all satellites usually leads to an overloaded figure)
+    'sat_list_Fig2' : ['L8'], #plot spectral transects for these satellites in Figure 2 (plotting all satellites usually leads to an overloaded figure)
     'Interpolation_method' : "bicubic", # interpolate the RGB images for illustration - choose between "None" #"bicubic"
     'linestyle' : ['-', '--', '-.'],
     'labelsize' : 18,
@@ -227,9 +223,11 @@ postprocess_params = {
 #load the pickle file containing the outputs of the pathfinding algorithm. This will load the results processed via the above 'settings_inlet' from Step 4
 
 #define data input and figure output paths
-postprocess_out_path = os.path.join(filepath_data, sitename,  'results_' + settings['inputs']['analysis_vrs'], 'XB' + str(settings_inlet['XB_cost_raster_amp_exponent']) + 
+postprocess_out_path = os.path.join(filepath_data, sitename,  'results_' + settings['inputs']['analysis_vrs'], 'XB' +
+                                    str(settings_inlet['XB_cost_raster_amp_exponent']) + 
                                 '_AB' + str(settings_inlet['AB_cost_raster_amp_exponent']) + '_' + settings_inlet['path_index'])
-figure_out_path = os.path.join(postprocess_out_path,'analyzed_for_' + postprocess_params['satnames_string'] + '_' + postprocess_params['spectral_index']  + '_' +  postprocess_params['Postprocessing_version'])
+figure_out_path = os.path.join(postprocess_out_path,'analyzed_for_' + '_'.join(postprocess_params['sat_list_pp']) + 
+                               '_' + postprocess_params['spectral_index']  + '_' +  postprocess_params['Postprocessing_version'])
 
 #create directories if they do not already exist
 if not os.path.exists(postprocess_out_path ):
@@ -251,7 +249,8 @@ XS_gdf = pickle.load(infile)
 infile.close()
 
 #load training data into dataframe
-Training_data_df  =  pd.read_csv(glob.glob(os.path.join(filepath_data, sitename) + '/user_validation_data/*' +  '*training*' +  settings_training['username'] +  '.csv' )[0], index_col=0) 
+Training_data_df  =  pd.read_csv(glob.glob(os.path.join(filepath_data, sitename) + '/user_validation_data/*' +
+                                           '*training*' +  settings_training['username'] +  '.csv' )[0], index_col=0) 
 Training_data_df = Training_data_df[~Training_data_df.index.duplicated(keep='first')] #remove possible duplicate entries. 
 
 
@@ -262,7 +261,7 @@ Training_data_df = Training_data_df[~Training_data_df.index.duplicated(keep='fir
 ########################## 
 
 #create dataframe of delta-to-median parameter for all open and closed training images as the basis for identifying the optimal classificaiton threshold
-Classification_df = InletTracker_tools.setup_classification_df(XS_df, Training_data_df,postprocess_params)
+Classification_df = InletTracker_tools.setup_classification_df(XS_df, Training_data_df, postprocess_params)
 
 #identify optimal classification threshold: binary inlet states are defined as 'open' = 1, 'closed' =  0
 Validation_stats_df={} 
@@ -276,10 +275,10 @@ print(Validation_stats_df)
 print('')
 
 #set the thresholds for along and across-berm classification into binary inlet states
-Analysis_direction =  'AB' #AB for along-berm, XB for across berm. Choose the analysis direction that lead to the highes Fscore and Accuracy above. 
+analysis_direction =  'AB' #AB for along-berm, XB for across berm. Choose the analysis direction that lead to the highes Fscore and Accuracy above. 
 
 #use optimal threshold inferred from user validation data - the parameter is DTM_threshold
-if Analysis_direction == 'XB':
+if analysis_direction == 'XB':
     DTM_threshold =  Validation_stats_df['Opt_threshold'][0] #if across-berm classification stats were better 
 else:
     DTM_threshold =  Validation_stats_df['Opt_threshold'][1] #if along-berm classification stats were better 
@@ -288,7 +287,10 @@ else:
 #DTM_threshold =  0.1
 
 #classify the full image series based on the best performing analysis direction and corresponding threshold
-XS_DTM_classified_df = InletTracker_tools.classify_image_series_via_DTM(XS_df, Analysis_direction, DTM_threshold, postprocess_params)
+XS_DTM_classified_df = InletTracker_tools.classify_image_series_via_DTM(XS_df, analysis_direction, DTM_threshold, postprocess_params)
+
+#subset the dataframe for a specific period of interest as specified in postprocess_params
+XS_DTM_classified_df = InletTracker_tools.subset_DTM_df_in_time(XS_DTM_classified_df, postprocess_params)
 
 
 #%% ######################
@@ -301,7 +303,7 @@ XS_DTM_classified_df = InletTracker_tools.classify_image_series_via_DTM(XS_df, A
 #For a first pass assessment or under limited time, skip this step! 
 
 #run the 'check detection' function and create a clean XS_DTM_classified_df
-XS_DTM_classified_df = InletTracker_tools.check_inlet_state_detection(postprocess_out_path, XS_DTM_classified_df.iloc[0:10])
+#XS_DTM_classified_df = InletTracker_tools.check_inlet_state_detection(postprocess_out_path, XS_DTM_classified_df)
     
     
     
@@ -328,7 +330,7 @@ for date in XS_DTM_classified_df[XS_DTM_classified_df['bin_inlet_state'] == 0].i
     XS_c_gdf = pd.concat([XS_c_gdf, XS_gdf[XS_gdf['date'] == date]], axis = 0)
 
 #plot result figures and save processed data as csv
-InletTracker_tools.plot_inletsat_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, postprocess_params, metadata,  figure_out_path)
+InletTracker_tools.plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, postprocess_params, analysis_direction, metadata,  figure_out_path)
 
 
 

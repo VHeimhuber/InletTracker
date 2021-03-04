@@ -714,7 +714,7 @@ def automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tid
             path_B = np.zeros_like(costSurfaceArray)
             path_B[indices_B.T[1], indices_B.T[0]] = 1
            
-            if settings_inlet['use_straight_lines']:
+            if settings_inlet['AB_use_straight_line']:
                 indices_B = np.array([indices_B[0], indices_B[-1]])
    
             # geospatial processing of the least cost path including coordinate transformations and splitting the path into intervals of 1m
@@ -788,7 +788,7 @@ def automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tid
             indices = list(map(lambda sub: (sub[1], sub[0]), indices))
             indices = np.array(indices)
             
-            if settings_inlet['use_straight_lines']:
+            if settings_inlet['XB_use_straight_line']:
                 indices = np.array([indices[0], indices[-1]])
                 
             #create indexed raster from indices
@@ -1486,15 +1486,18 @@ def calculateDeltaToMedian(XS_df, postprocess_params, calc_direction):
     """  
     
     #subset the full result dataframe to the spectral index desired for analysis and also either AB or XB analysis direction
-    df2 = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index'] + '_').filter(regex='_' + calc_direction).dropna()
+    df2 = XS_df.filter(regex='|'.join(postprocess_params['sat_list_pp'])).filter(regex='_' + 
+                                                                                 postprocess_params['spectral_index'] + '_').filter(regex='_' + calc_direction)
     #create dataframe with the distance to the intersection for each time step
-    df2b = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + calc_direction).dropna().max()  
+    df2b = XS_df.filter(regex='|'.join(postprocess_params['sat_list_pp'])).filter(regex='_distance_to_intersection').filter(regex='_' + 
+                                                                                                                            calc_direction).dropna().max()  
     #create dataframe of delta-to-median for each time step
-    df4 = pd.DataFrame(XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_AB_').dropna().quantile(q=postprocess_params['metric_percentile'],
+    df4 = pd.DataFrame(XS_df.filter(regex='|'.join(postprocess_params['sat_list_pp'])).filter(regex='_' + 
+                                                                                              postprocess_params['spectral_index']).filter(regex='_AB_').quantile(q=postprocess_params['metric_percentile'],
                           axis=0, numeric_only=True, interpolation='linear'))
-          
+    
     #to do calculations across the various dataframes, here, the indices are normalized to only the 'date' component. 
-    dfintm = XS_df.filter(regex=postprocess_params['satnames']).filter(regex='_distance_to_intersection').filter(regex='_' + calc_direction).dropna()
+    dfintm = XS_df.filter(regex='|'.join(postprocess_params['sat_list_pp'])).filter(regex='_distance_to_intersection').filter(regex='_' + calc_direction).dropna()
     newindex = []
     for index in df2.columns:
         newindex.append(index[:19])
@@ -1616,6 +1619,34 @@ def classify_image_series_via_DTM(XS_df, analysis_direction, DTM_threshold, post
     return XS_sums_df
 
 
+
+def subset_DTM_df_in_time(Input_df, postprocess_params):
+    """
+    VH UNSW 2021
+      
+    this function subsets the input dataframe to within the start and end date 
+    
+    """
+    newindex = []
+    for index in Input_df.index:
+        newindex.append(pd.to_datetime(index[:19], format = '%Y-%m-%d-%H-%M-%S'))
+    Input_df.index = newindex
+    
+    #subset the dataframe for a specific period of interest
+    Input_df  = Input_df[postprocess_params['startdate']:postprocess_params['enddate']]
+    
+    newindex = []
+    for index in Input_df .index:
+        date = str(index)
+        date = date.replace(" ", "-")
+        date = date.replace(":", "-")
+        newindex.append(date)
+    Input_df.index = newindex
+    
+    return Input_df 
+
+
+
 def show_detection(postprocess_out_path, date, inlet_state_str): 
     """
     VH UNSW 2021
@@ -1730,7 +1761,7 @@ def check_inlet_state_detection(postprocess_out_path, XS_DTM_classified_df):
     return XS_DTM_clfd_quality_contrd_df
 
 
-def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, postprocess_params, metadata,  figure_out_path):
+def plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, postprocess_params,analysis_direction, metadata,  figure_out_path):
     """
     VH UNSW 2021
       
@@ -1742,9 +1773,19 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     #Fully automated part of the plot function    
     plt.style.use('classic')  
     
-    filepath = SDS_tools.get_filepath(settings['inputs'],postprocess_params['satname_img'])
-    filenames = metadata[postprocess_params['satname_img']]['filenames']
-    epsg_dict = dict(zip(filenames, metadata[postprocess_params['satname_img']]['epsg']))      
+    if 'S2' in postprocess_params['sat_list_pp']:
+        background_img_sat = 'S2'
+    elif 'L8' in postprocess_params['sat_list_pp']:
+        background_img_sat = 'L8'  
+    elif 'L7' in postprocess_params['sat_list_pp']:
+        background_img_sat = 'L7' 
+    else:
+        background_img_sat = 'L5' 
+    print(background_img_sat + ' is used as background image in figures')
+        
+    filepath = SDS_tools.get_filepath(settings['inputs'],background_img_sat)
+    filenames = metadata[background_img_sat]['filenames']
+    epsg_dict = dict(zip(filenames, metadata[background_img_sat]['epsg']))      
             
     #plot font size and type
     ALPHA_figs = 1
@@ -1766,24 +1807,25 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     ####################################
     #Plot the closed inlet states
     ####################################
-    direction = 'XB'
-    
+    direction = 'XB'       
+        
     # row 1 pos 2   ################################################################################  
     try:
-        Loopimage_c_date = XS_c_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
+        Loopimage_c_date = XS_c_df.filter(regex=background_img_sat).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
     except: 
-        Loopimage_c_date = XS_o_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
+        Loopimage_c_date = XS_o_df.filter(regex=background_img_sat).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
         print('no closed image was available for [satname_img] - open image will be plotted instead')
     r = re.compile(".*" + Loopimage_c_date)    
     #combined_df.filter(regex=Gauge[3:]+'_')
-    fn = SDS_tools.get_filenames(list(filter(r.match, filenames))[0],filepath, postprocess_params['satname_img'])
-    im_ms, georef, cloud_mask, im_extra, im_QA, im_nodata = SDS_preprocess.preprocess_single(fn, postprocess_params['satname_img'], settings['cloud_mask_issue'])
+    fn = SDS_tools.get_filenames(list(filter(r.match, filenames))[0],filepath, background_img_sat)
+    im_ms, georef, cloud_mask, im_extra, im_QA, im_nodata = SDS_preprocess.preprocess_single(fn, background_img_sat, settings['cloud_mask_issue'])
     
     # rescale image intensity for display purposes  
     im_plot = SDS_preprocess.rescale_image_intensity(im_ms[:,:,[2,1,0]], cloud_mask, 99.9)  
         
     image_epsg = epsg_dict[list(filter(r.match, filenames))[0]]
-    shapes = load_shapes_as_ndarrays(settings['inputs']['location_shps']['layer'].values, settings['inputs']['location_shps'], postprocess_params['satname_img'],
+    
+    shapes = load_shapes_as_ndarrays(settings['inputs']['location_shps']['layer'].values, settings['inputs']['location_shps'], background_img_sat,
                                      settings['inputs']['sitename'], settings['shapefile_EPSG'],
                                        georef, metadata, image_epsg)     
     
@@ -1795,7 +1837,7 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     XS_c_gdf_dir = XS_c_gdf[XS_c_gdf['direction']==direction]
             
     ax=plt.subplot(2,2,1)
-    plt.title(postprocess_params['satname_img'] + ' ' + Loopimage_c_date + ' closed') 
+    plt.title('C-D closed inlets for ' + ' '.join(postprocess_params['sat_list_Fig1'])) 
     plt.imshow(im_plot, interpolation=postprocess_params['Interpolation_method']) 
     plt.rcParams["axes.grid"] = False
     plt.xlim(Xmin-postprocess_params['xaxisadjust'] , Xmax+postprocess_params['xaxisadjust'])
@@ -1803,11 +1845,11 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     #ax.grid(None)
     ax.axis('off')
     
-    n=len(XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction ).columns)
+    n=len(XS_c_df.filter(regex='|'.join(postprocess_params['sat_list_Fig1'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction ).columns)
     color=iter(cm.Oranges(np.linspace(0,1,n)))
     for i in range(0,n,1):    
         #plot the digitized inlet paths on top of images
-        line = list(XS_c_gdf_dir[XS_c_gdf_dir['date'].str.contains(XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).columns[i][:19])].geometry.iloc[0].coords) ##!@check date functions
+        line = list(XS_c_gdf_dir[XS_c_gdf_dir['date'].str.contains(XS_c_df.filter(regex='|'.join(postprocess_params['sat_list_Fig1'])).filter(regex='_' + postprocess_params['spectral_index']).columns[i][:19])].geometry.iloc[0].coords) ##!@check date functions
         df = pd.DataFrame(line)
         df = df.drop(columns=2)      
         pts_world_interp_reproj = SDS_tools.convert_epsg(df.values, settings['output_epsg'], image_epsg)
@@ -1826,7 +1868,7 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     XS_c_gdf_dir = XS_c_gdf[XS_c_gdf['direction']==direction]
     
     ax=plt.subplot(2,2,2)
-    plt.title(postprocess_params['satname_img'] + ' ' + Loopimage_c_date + ' closed') 
+    plt.title('A-B closed inlets for ' + ' '.join(postprocess_params['sat_list_Fig1'])) 
     plt.imshow(im_plot, interpolation=postprocess_params['Interpolation_method']) 
     plt.rcParams["axes.grid"] = False
     plt.xlim(Xmin-postprocess_params['xaxisadjust'] , Xmax+postprocess_params['xaxisadjust'])
@@ -1834,11 +1876,11 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     #ax.grid(None)
     ax.axis('off')
     
-    n=len(XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns)
+    n=len(XS_c_df.filter(regex='|'.join(postprocess_params['sat_list_Fig1'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns)
     color=iter(cm.Oranges(np.linspace(0,1,n)))
     for i in range(0,n,1):    
         #plot the digitized inlet paths on top of images - failing due to mixed up epsgs
-        line = list(XS_c_gdf_dir[XS_c_gdf_dir['date'].str.contains(XS_c_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).columns[i][:19])].geometry.iloc[0].coords)
+        line = list(XS_c_gdf_dir[XS_c_gdf_dir['date'].str.contains(XS_c_df.filter(regex='|'.join(postprocess_params['sat_list_Fig1'])).filter(regex='_' + postprocess_params['spectral_index']).columns[i][:19])].geometry.iloc[0].coords)
         df = pd.DataFrame(line)
         df = df.drop(columns=2)      
         pts_world_interp_reproj = SDS_tools.convert_epsg(df.values, settings['output_epsg'], image_epsg)
@@ -1859,21 +1901,21 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
             
     # row 1 pos 2   ################################################################################         
     try:
-        Loopimage_c_date = XS_o_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns[0][:19]
+        Loopimage_c_date = XS_o_df.filter(regex=background_img_sat).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns[0][:19]
     except: 
-        Loopimage_c_date = XS_c_df.filter(regex=postprocess_params['satname_img']).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
+        Loopimage_c_date = XS_c_df.filter(regex=background_img_sat).filter(regex='_' + postprocess_params['spectral_index']).columns[0][:19]
         print('no open image was available for [satname_img] - closed image will be plotted instead')
     
     r = re.compile(".*" + Loopimage_c_date)    
-    fn = SDS_tools.get_filenames(list(filter(r.match, filenames))[0],filepath, postprocess_params['satname_img'])
+    fn = SDS_tools.get_filenames(list(filter(r.match, filenames))[0],filepath, background_img_sat)
     #print(fn)
-    im_ms, georef, cloud_mask, im_extra, im_QA, im_nodata = SDS_preprocess.preprocess_single(fn, postprocess_params['satname_img'], settings['cloud_mask_issue'])
+    im_ms, georef, cloud_mask, im_extra, im_QA, im_nodata = SDS_preprocess.preprocess_single(fn, background_img_sat, settings['cloud_mask_issue'])
     # rescale image intensity for display purposes
     
     im_plot = SDS_preprocess.rescale_image_intensity(im_ms[:,:,[2,1,0]], cloud_mask, 99.9)  
         
     image_epsg = epsg_dict[list(filter(r.match, filenames))[0]]
-    shapes = load_shapes_as_ndarrays(settings['inputs']['location_shps']['layer'].values, settings['inputs']['location_shps'], postprocess_params['satname_img'],  settings['inputs']['sitename'], settings['shapefile_EPSG'],
+    shapes = load_shapes_as_ndarrays(settings['inputs']['location_shps']['layer'].values, settings['inputs']['location_shps'], background_img_sat,  settings['inputs']['sitename'], settings['shapefile_EPSG'],
                                        georef, metadata, image_epsg)  
 
        
@@ -1885,7 +1927,8 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     XS_o_gdf_dir = XS_o_gdf[XS_o_gdf['direction']==direction]
     
     ax=plt.subplot(2,2,3)
-    plt.title(postprocess_params['satname_img'] + ' ' + Loopimage_c_date + ' open') 
+    plt.title(background_img_sat + ' ' + Loopimage_c_date + ' open') 
+    plt.title('C-D open inlets for ' + ' '.join(postprocess_params['sat_list_Fig1'])) 
     plt.imshow(im_plot, interpolation=postprocess_params['Interpolation_method']) 
     plt.rcParams["axes.grid"] = False
     plt.xlim(Xmin-postprocess_params['xaxisadjust'] , Xmax+postprocess_params['xaxisadjust'])
@@ -1893,11 +1936,11 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     #ax.grid(None)
     ax.axis('off')
     
-    n=len(XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns)
+    n=len(XS_o_df.filter(regex='|'.join(postprocess_params['sat_list_Fig1'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns)
     color=iter(cm.Blues(np.linspace(0,1,n)))
     for i in range(0,n,1):
         #plot the digitized inlet paths on top of images - failing due to mixed up epsgs
-        line = list(XS_o_gdf_dir[XS_o_gdf_dir['date'].str.contains(XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns[i][:19])].geometry.iloc[0].coords)
+        line = list(XS_o_gdf_dir[XS_o_gdf_dir['date'].str.contains(XS_o_df.filter(regex='|'.join(postprocess_params['sat_list_Fig1'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns[i][:19])].geometry.iloc[0].coords)
         df = pd.DataFrame(line)
         df = df.drop(columns=2)      
         pts_world_interp_reproj = SDS_tools.convert_epsg(df.values, settings['output_epsg'], image_epsg)
@@ -1915,7 +1958,7 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     direction =  'AB'
     XS_o_gdf_dir = XS_o_gdf[XS_o_gdf['direction']==direction]
     ax=plt.subplot(2,2,4)
-    plt.title(postprocess_params['satname_img'] + ' ' + Loopimage_c_date + ' open') 
+    plt.title('A-B open inlets for ' + ' '.join(postprocess_params['sat_list_Fig1'])) 
     plt.imshow(im_plot, interpolation=postprocess_params['Interpolation_method']) 
     plt.rcParams["axes.grid"] = False
     plt.xlim(Xmin-postprocess_params['xaxisadjust'] , Xmax+postprocess_params['xaxisadjust'])
@@ -1923,11 +1966,11 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     #ax.grid(None)
     ax.axis('off')
      
-    n=len(XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns)
+    n=len(XS_o_df.filter(regex='|'.join(postprocess_params['sat_list_Fig1'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns)
     color=iter(cm.Blues(np.linspace(0,1,n)))
     for i in range(0,n,1):
         #plot the digitized inlet paths on top of images - failing due to mixed up epsgs
-        line = list(XS_o_gdf_dir[XS_o_gdf_dir['date'].str.contains(XS_o_df.filter(regex=postprocess_params['satnames']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns[i][:19])].geometry.iloc[0].coords)
+        line = list(XS_o_gdf_dir[XS_o_gdf_dir['date'].str.contains(XS_o_df.filter(regex='|'.join(postprocess_params['sat_list_Fig1'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + direction).columns[i][:19])].geometry.iloc[0].coords)
         df = pd.DataFrame(line)
         df = df.drop(columns=2)      
         pts_world_interp_reproj = SDS_tools.convert_epsg(df.values, settings['output_epsg'], image_epsg)
@@ -1943,7 +1986,7 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
             plt.text(pts_pix_interp[-1,0]+3, pts_pix_interp[-1,1]+3,'D',horizontalalignment='left', color=postprocess_params['open_color'], fontsize=postprocess_params['labelsize'])       
     
     fig.tight_layout()   
-    fig.savefig(os.path.join(figure_out_path,'Figure_1_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + postprocess_params['satnames_string'] + '.png'), dpi=400)          
+    fig.savefig(os.path.join(figure_out_path,'Figure_1_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + '_'.join(postprocess_params['sat_list_Fig2']) + '.png'), dpi=400)          
     plt.close()  
     
     
@@ -1958,51 +2001,59 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     #plot the AB transects
     direction =  'AB'  
     ax=plt.subplot(4,1,1)      
-    XS_o_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
-                direction).dropna().plot(color=postprocess_params['open_color'],  linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.3,ax=ax)
+    XS_o_df.filter(regex='|'.join(postprocess_params['sat_list_Fig2'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+                direction).plot(color=postprocess_params['open_color'],  linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.3,ax=ax)
     plt.ylim(-1,0.7)
     plt.xlim(left=0)
+    plt.xlim(0, np.int(XS_o_df.filter(regex='|'.join(postprocess_params['sat_list_Fig2'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+                direction).notna().sum().mean()))
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
     #plt.text(1,0,'C',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
     plt.xlabel('Distance along along-berm (C-D) transects [m]')
-    plt.ylabel(postprocess_params['spectral_index'] + ' (open inlets)')
+    plt.ylabel(postprocess_params['spectral_index'] + ' (open inlets) ' + ' '.join(postprocess_params['sat_list_Fig2']))
     ax.get_legend().remove()  
     
     ax=plt.subplot(4,1,2)      
-    XS_c_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
-                direction).dropna().plot(color=postprocess_params['closed_color'], linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.3, ax=ax)
+    XS_c_df.filter(regex='|'.join(postprocess_params['sat_list_Fig2'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+                direction).plot(color=postprocess_params['closed_color'], linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.3, ax=ax)
     plt.ylim(-1,0.7)
-    plt.xlim(left=0)
+    plt.xlim(0, np.int(XS_c_df.filter(regex='|'.join(postprocess_params['sat_list_Fig2'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+            direction).notna().sum().mean()))
+    #plt.xlim(left=0)
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
     #plt.text(1,0,'C',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
     plt.xlabel('Distance along along-berm (C-D) transects [m]')
-    plt.ylabel(postprocess_params['spectral_index'] + ' (closed inlets)')
+    plt.ylabel(postprocess_params['spectral_index'] + ' (closed inlets) ' + ' '.join(postprocess_params['sat_list_Fig2']))
     ax.get_legend().remove()     
              
     #plot the XB transects
     direction =  'XB'     
     ax=plt.subplot(4,1,3)
-    XS_o_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
-                direction).dropna().plot(color=postprocess_params['open_color'],  linestyle= postprocess_params['linestyle'][0],lw=1.5,alpha=0.3,ax=ax)    
+    XS_o_df.filter(regex='|'.join(postprocess_params['sat_list_Fig2'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+                direction).plot(color=postprocess_params['open_color'],  linestyle= postprocess_params['linestyle'][0],lw=1.5,alpha=0.3,ax=ax)    
     plt.ylim(-1,0.7)
+    plt.xlim(0, np.int(XS_o_df.filter(regex='|'.join(postprocess_params['sat_list_Fig2'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+        direction).notna().sum().mean()))
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
     #plt.text(1,0,'A',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
     plt.xlabel('Distance along across-berm (A-B) transects [m]')
-    plt.ylabel(postprocess_params['spectral_index'] + ' (open inlets)')
+    plt.ylabel(postprocess_params['spectral_index'] + ' (open inlets) ' + ' '.join(postprocess_params['sat_list_Fig2']))
     ax.get_legend().remove() 
     
     ax=plt.subplot(4,1,4)
-    XS_c_df.filter(regex=postprocess_params['satnames_XS']).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
-                direction).dropna().plot(color=postprocess_params['closed_color'], linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.3, ax=ax)
+    XS_c_df.filter(regex='|'.join(postprocess_params['sat_list_Fig2'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+                direction).plot(color=postprocess_params['closed_color'], linestyle = postprocess_params['linestyle'][0],lw=1.5,alpha=0.3, ax=ax)
     plt.ylim(-1,0.7)
+    plt.xlim(0, np.int(XS_c_df.filter(regex='|'.join(postprocess_params['sat_list_Fig2'])).filter(regex='_' + postprocess_params['spectral_index']).filter(regex='_' + 
+        direction).notna().sum().mean()))
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
     #plt.text(1,0,'A',horizontalalignment='left', color='grey' , fontsize=postprocess_params['labelsize'])
     plt.xlabel('Distance along across-berm (A-B) transects [m]')
-    plt.ylabel(postprocess_params['spectral_index'] + ' (closed inlets)')
+    plt.ylabel(postprocess_params['spectral_index'] + ' (closed inlets) ' + ' '.join(postprocess_params['sat_list_Fig2']))
     ax.get_legend().remove() 
     
     fig.tight_layout()   
-    fig.savefig(os.path.join(figure_out_path,'Figure_2_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + postprocess_params['satnames_string'] + '.png'), dpi=400)          
+    fig.savefig(os.path.join(figure_out_path,'Figure_2_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + '_'.join(postprocess_params['sat_list_Fig2'])+ '.png'), dpi=400)          
     plt.close()   
     
     
@@ -2013,39 +2064,37 @@ def plot_InletTracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     fig = plt.figure(figsize=(12,7))  
     print('plotting Figure 3')       
 
-    #plot along berm 
-    direction =  'AB' 
-      
-    XS_c_sums_AB_df = pd.DataFrame(calculateDeltaToMedian(XS_c_df, postprocess_params, direction))   
-    XS_o_sums_AB_df = pd.DataFrame(calculateDeltaToMedian(XS_o_df, postprocess_params, direction))    
-    XS_co_sums_AB_df = XS_c_sums_AB_df.append(XS_o_sums_AB_df )
-    
-    ax=plt.subplot(2,1,1)  
+    XS_c_sums_AB_df = pd.DataFrame(calculateDeltaToMedian(XS_c_df, postprocess_params, 'AB'))   
+    XS_o_sums_AB_df = pd.DataFrame(calculateDeltaToMedian(XS_o_df, postprocess_params, 'AB'))    
+    XS_co_sums_AB_df = XS_c_sums_AB_df.append(XS_o_sums_AB_df)
+    XS_c_sums_XB_df = pd.DataFrame(calculateDeltaToMedian(XS_c_df, postprocess_params, 'XB'))   
+    XS_o_sums_XB_df = pd.DataFrame(calculateDeltaToMedian(XS_o_df, postprocess_params,'XB'))    
+    XS_co_sums_XB_df = XS_c_sums_XB_df.append(XS_o_sums_XB_df)
+        
+    #plot along berm       
+    ax=plt.subplot(2,1,1) 
+    plt.title('Delta-to-median inferred from along-berm transects for ' + ' '.join(postprocess_params['sat_list_pp'])) 
     XS_co_sums_AB_df.plot(color='grey', style='--',lw=0.8, alpha=0.8, ax=ax) 
     XS_c_sums_AB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],   ax=ax)
-    XS_o_sums_AB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)       
-    plt.ylim(-0.1,XS_o_sums_AB_df.max().max())
-    plt.ylabel('Along-berm Delta-to-median')
+    XS_o_sums_AB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)  
+    plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
+    plt.ylim(XS_co_sums_AB_df.min().min(),XS_co_sums_AB_df.max().max())
+    plt.ylabel('Delta to along-berm median')
     ax.get_legend().remove()  
     
-    #plot along berm 
-    direction =  'XB'  
-
-    #plot the mNDWI sums along the transects over time      
-    XS_c_sums_XB_df = pd.DataFrame(calculateDeltaToMedian(XS_c_df, postprocess_params, direction))   
-    XS_o_sums_XB_df = pd.DataFrame(calculateDeltaToMedian(XS_o_df, postprocess_params, direction))    
-    XS_co_sums_XB_df = XS_c_sums_XB_df.append(XS_o_sums_XB_df)
-    
+    #plot across berm  
     ax=plt.subplot(2,1,2)
+    plt.title('Delta-to-median inferred from across-berm transects for ' + ' '.join(postprocess_params['sat_list_pp'])) 
     XS_co_sums_XB_df.plot(color='grey', style='--',lw=0.8, alpha=0.8, ax=ax)
     XS_c_sums_XB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],  ax=ax)
     XS_o_sums_XB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)
-    plt.ylim(-0.1,XS_o_sums_AB_df.max().max())
-    plt.ylabel('Across-berm Delta-to-median')
+    plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
+    plt.ylim(XS_co_sums_XB_df.min().min(),XS_co_sums_XB_df.max().max())
+    plt.ylabel('Delta to along-berm median')
     ax.get_legend().remove()  
          
     fig.tight_layout()   
-    fig.savefig(os.path.join(figure_out_path,'Figure_3_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + postprocess_params['satnames_string'] + '.png'), dpi=400)          
+    fig.savefig(os.path.join(figure_out_path,'Figure_3_'  + postprocess_params['spectral_index'] + '_' + datetime.now().strftime("%d-%m-%Y") + '_' + '_'.join(postprocess_params['sat_list_pp']) + '.png'), dpi=400)          
     plt.close()
     
     
