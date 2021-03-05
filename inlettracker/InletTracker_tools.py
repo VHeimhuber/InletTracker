@@ -2085,6 +2085,7 @@ def plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     XS_co_sums_AB_df.plot(color='grey', style='--',lw=0.8, alpha=0.8, ax=ax) 
     XS_c_sums_AB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],   ax=ax)
     XS_o_sums_AB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)  
+    XS_o_sums_AB_df.rolling(window=postprocess_params['rolling window size'], center=True).mean().plot(color=postprocess_params['rolling color'], linestyle='--',lw=3, ax=ax)
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
     plt.ylim(XS_co_sums_AB_df.min().min(),XS_co_sums_AB_df.max().max())
     plt.ylabel('Delta to along-berm median')
@@ -2096,6 +2097,7 @@ def plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     XS_co_sums_XB_df.plot(color='grey', style='--',lw=0.8, alpha=0.8, ax=ax)
     XS_c_sums_XB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],  ax=ax)
     XS_o_sums_XB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)
+    XS_o_sums_XB_df.rolling(window=postprocess_params['rolling window size'], center=True).mean().plot(color=postprocess_params['rolling color'], linestyle='--',lw=3, ax=ax) 
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
     plt.ylim(XS_co_sums_XB_df.min().min(),XS_co_sums_XB_df.max().max())
     plt.ylabel('Delta to along-berm median')
@@ -2132,8 +2134,7 @@ def plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     
     #export full dataframe with all the transects and delta to percentiles
     XS_sums_ABXB_df.to_csv(os.path.join(figure_out_path, settings['inputs']['sitename'] + '_postprocessed_summary_df_' + postprocess_params['spectral_index'] + '.csv'))
-              
-        
+
         
 
     
