@@ -454,16 +454,24 @@ def create_training_data(metadata, settings, settings_training):
                 # calculate cloud cover
                 cloud_cover = np.divide(sum(sum(cloud_mask.astype(int))),
                                         (cloud_mask.shape[0]*cloud_mask.shape[1]))
-                
-                #skip image if cloud cover is above threshold
-                if cloud_cover > settings['cloud_thresh']:     #####!!!!!##### Intermediate
-                    print('image was cloudy, skipped')
-                    continue
-                
+                          
                 #load boundary shapefiles for each scene and reproject according to satellite image epsg  
                 shapes = load_shapes_as_ndarrays(settings['inputs']['location_shps']['layer'].values, settings['inputs']['location_shps'], satname, sitename, settings['shapefile_EPSG'],
                                georef, metadata, epsg_dict[filenames[i]] ) 
-                         
+                
+                # calculate cloud cover over inlet area only
+                #create a ref mask that's true everywhere 
+                ref_mask = np.ones(cloud_mask.shape, dtype=bool)      
+                ref_mask = maskimage_frompolygon_set_value(ref_mask, shapes['A-B Mask'], False)
+                #set all cloud mask pixels outside of the inlet bounding box to False = not cloudy
+                cloud_mask1 = maskimage_frompolygon_set_value(cloud_mask, shapes['A-B Mask'], False)
+                cloud_cover = np.divide(sum(sum(cloud_mask1.astype(int))), sum(sum(ref_mask.astype(int))))            
+                    
+                # skip image if cloud cover is above threshold
+                if cloud_cover > settings['cloud_thresh']:
+                    print(str(i) + ' too cloudy - skipped')
+                    continue
+            
                 #get the min and max corner (in pixel coordinates) of the inlet area that will be used for plotting the data for visual inspection
                 Xmin,Xmax,Ymin,Ymax = get_bounding_box_minmax(shapes['A-B Mask'])      
                     
@@ -975,8 +983,8 @@ def automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tid
                 #plot tidal histogram instead of RGB if desired
                 if settings['use_fes_data'] & settings_inlet['plot_tide_histogram']:  
                     # plot time-step distribution
-                    seaborn.kdeplot(tides_df_ss['tide_level'], shade=True,vertical=False, color='blue',bw=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
-                    seaborn.kdeplot(sat_tides_df_ss['tide_level'], shade=True,vertical=False, color='lightblue',bw=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(tides_df_ss['tide_level'], shade=True,vertical=False, color='blue',bw_adjust=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(sat_tides_df_ss['tide_level'], shade=True,vertical=False, color='lightblue',bw_adjust=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
                     plt.xlim(-1,1)
                     plt.ylabel('Probability density', fontsize=settings_inlet['axlabelsize'])
                     plt.xlabel('Tides over full period (darkblue) and during images only (lightblue)', fontsize=settings_inlet['axlabelsize'])
@@ -1154,16 +1162,16 @@ def automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tid
                 
                 ax=plt.subplot(4,3,9)
                 if settings_inlet['path_index'] in ['mndwi', 'swir', 'index']: 
-                    seaborn.kdeplot(z_mndwi, shade=True,vertical=False, color='lightblue',bw=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
-                    seaborn.kdeplot(z_mndwi_B, shade=True,vertical=False, color='orange',bw=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(z_mndwi, shade=True,vertical=False, color='lightblue',bw_adjust=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(z_mndwi_B, shade=True,vertical=False, color='orange',bw_adjust=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
                     plt.axvline(x=np.nanpercentile(z_mndwi_B, settings_inlet['sand_percentile'] ), color='orchid', linestyle='dotted', lw=2, alpha=1) 
                     plt.text(np.nanpercentile(z_mndwi_B, settings_inlet['sand_percentile'] ) , 0.5 ,  str(settings_inlet['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_inlet['vhline_transparancy'])                      
                     plt.xlim(-1,0.5)
                     plt.ylabel('Probability density', fontsize=settings_inlet['axlabelsize'])
                     plt.xlabel('mNDWI over A-B (lightblue) and C-D (orange) transect', fontsize=settings_inlet['axlabelsize'])
                 if settings_inlet['path_index'] in ['ndwi', 'nir']:  
-                    seaborn.kdeplot(z_ndwi, shade=True,vertical=False, color='lightblue',bw=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
-                    seaborn.kdeplot(z_ndwi_B, shade=True,vertical=False, color='orange',bw=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(z_ndwi, shade=True,vertical=False, color='lightblue',bw_adjust=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(z_ndwi_B, shade=True,vertical=False, color='orange',bw_adjust=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
                     img_ndwi_perc = np.nanpercentile(z_ndwi_B, settings_inlet['sand_percentile'] )
                     plt.axvline(x=img_ndwi_perc, color='orchid', linestyle='dotted', lw=2, alpha=1) 
                     plt.text(img_ndwi_perc , 0.5 ,  str(settings_inlet['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_inlet['vhline_transparancy'])                      
@@ -1246,25 +1254,25 @@ def automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tid
                 #histograms
                 ax=plt.subplot(4,3,12)            
                 if settings_inlet['path_index'] in ['swir', 'mndwi']:
-                    seaborn.kdeplot(z_swir, shade=True,vertical=False, color='lightblue',bw=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(z_swir, shade=True,vertical=False, color='lightblue',bw_adjust=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
                     plt.xlim(-0.1,1)
-                    seaborn.kdeplot(z_swir_B, shade=True,vertical=False, color='orange',bw=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(z_swir_B, shade=True,vertical=False, color='orange',bw_adjust=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
                     plt.axvline(x=np.nanpercentile(z_swir_B, settings_inlet['sand_percentile'] )    , color='orchid', linestyle='dotted', lw=2, alpha=1) 
                     plt.text(np.nanpercentile(z_swir_B, settings_inlet['sand_percentile'] ) , 0.5 ,  str(settings_inlet['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_inlet['vhline_transparancy'])                                         
                     plt.ylabel('Probability density', fontsize=settings_inlet['axlabelsize'])
                     plt.xlabel('SWIR1 along A-D (lightblue) and C-D (orange) transect', fontsize=settings_inlet['axlabelsize']) 
                 if settings_inlet['path_index'] in ['ndwi', 'nir']: 
-                    seaborn.kdeplot(z_ndwi, shade=True,vertical=False, color='lightblue',bw=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(z_ndwi, shade=True,vertical=False, color='lightblue',bw_adjust=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
                     plt.xlim(-1,0.5)
-                    seaborn.kdeplot(z_ndwi_B, shade=True,vertical=False, color='orange',bw=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)               
+                    seaborn.kdeplot(z_ndwi_B, shade=True,vertical=False, color='orange',bw_adjust=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)               
                     plt.axvline(x=np.nanpercentile(z_nir_B, settings_inlet['sand_percentile'] )  , color='orchid', linestyle='dotted', lw=2, alpha=1) 
                     plt.text(np.nanpercentile(z_nir_B, settings_inlet['sand_percentile'] )   , 0.5 ,  str(settings_inlet['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_inlet['vhline_transparancy'])                                         
                     plt.ylabel('Probability density', fontsize=settings_inlet['axlabelsize'])
                     plt.xlabel('NIR along A-D (lightblue) and C-D (orange) transect', fontsize=settings_inlet['axlabelsize'])     
                 if settings_inlet['path_index'] == 'index': 
-                    seaborn.kdeplot(z_bathy, shade=True,vertical=False, color='lightblue',bw=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(z_bathy, shade=True,vertical=False, color='lightblue',bw_adjust=settings_inlet['hist_bw'], legend=False, lw=2, ax=ax)
                     #plt.xlim(-0.1,1)
-                    seaborn.kdeplot(z_bathy_B, shade=True,vertical=False, color='orange',bw=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
+                    seaborn.kdeplot(z_bathy_B, shade=True,vertical=False, color='orange',bw_adjust=settings_inlet['hist_bw'],legend=False, lw=2, ax=ax)
                     img_ndwi_perc = np.nanpercentile(z_bathy_B, settings_inlet['sand_percentile'] )                 
                     plt.axvline(x=img_ndwi_perc, color='orchid', linestyle='dotted', lw=2, alpha=1) 
                     plt.text(img_ndwi_perc , 0.5 ,  str(settings_inlet['sand_percentile']) + 'p', rotation=90 , ha='right', va='bottom', alpha=settings_inlet['vhline_transparancy'])                                         
