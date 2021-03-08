@@ -1768,8 +1768,8 @@ def check_inlet_state_detection(postprocess_out_path, XS_DTM_classified_df):
     
     return XS_DTM_clfd_quality_contrd_df
 
-
-def plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, postprocess_params,analysis_direction, metadata,  figure_out_path):
+                    
+def plot_inlettracker_resultsV2(XS_df, XS_gdf, XS_DTM_classified_df, settings, postprocess_params,analysis_direction, metadata,  figure_out_path):
     """
     VH UNSW 2021
       
@@ -1806,6 +1806,21 @@ def plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
              'axes.titlesize':'small',
              'labelsize' :'small',
              'ytick.labelsize':'small'}
+    
+    XS_o_df = pd.DataFrame()       #dataframe containing transect data for all 'open' inlet states
+    XS_o_gdf = pd.DataFrame()      #geodataframe containing trasects for all 'open' inlet states
+    for date in XS_DTM_classified_df[XS_DTM_classified_df['bin_inlet_state'] == 1].index:
+        XS_o_df = pd.concat([XS_o_df, pd.DataFrame(XS_df.filter(regex=date))], axis = 1)
+        XS_o_gdf = pd.concat([XS_o_gdf, XS_gdf[XS_gdf['date'] == date]], axis = 0)
+    
+    #write open across-berm transects out as shapefile for visualization
+    XS_o_gdf[XS_o_gdf['direction']=='XB'].to_file(figure_out_path  + '/open_inlet_along_berm_paths.shp', driver='ESRI Shapefile')     
+    
+    XS_c_df = pd.DataFrame()        #dataframe containing transect data for all 'open' inlet states
+    XS_c_gdf = pd.DataFrame()       #geodataframe containing transects for all 'open' inlet states
+    for date in XS_DTM_classified_df[XS_DTM_classified_df['bin_inlet_state'] == 0].index:
+        XS_c_df = pd.concat([XS_c_df, pd.DataFrame(XS_df.filter(regex=date))], axis = 1)
+        XS_c_gdf = pd.concat([XS_c_gdf, XS_gdf[XS_gdf['date'] == date]], axis = 0)
     
     #plot settings
     plt.close('all') 
@@ -2085,7 +2100,8 @@ def plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     XS_co_sums_AB_df.plot(color='grey', style='--',lw=0.8, alpha=0.8, ax=ax) 
     XS_c_sums_AB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],   ax=ax)
     XS_o_sums_AB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)  
-    XS_o_sums_AB_df.rolling(window=postprocess_params['rolling window size'], center=True).mean().plot(color=postprocess_params['rolling color'], linestyle='--',lw=3, ax=ax)
+    if postprocess_params['plot DTM moving average']:
+        XS_co_sums_AB_df.rolling(window=postprocess_params['rolling window size'], center=True).mean().plot(color=postprocess_params['rolling color'], linestyle='--',lw=3, ax=ax)
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
     plt.ylim(XS_co_sums_AB_df.min().min(),XS_co_sums_AB_df.max().max())
     plt.ylabel('Delta to along-berm median')
@@ -2097,7 +2113,8 @@ def plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, pos
     XS_co_sums_XB_df.plot(color='grey', style='--',lw=0.8, alpha=0.8, ax=ax)
     XS_c_sums_XB_df.plot(color=postprocess_params['closed_color'],style='.',lw=postprocess_params['markersize'],  ax=ax)
     XS_o_sums_XB_df.plot(color=postprocess_params['open_color'], style='.',lw=postprocess_params['markersize'], ax=ax)
-    XS_o_sums_XB_df.rolling(window=postprocess_params['rolling window size'], center=True).mean().plot(color=postprocess_params['rolling color'], linestyle='--',lw=3, ax=ax) 
+    if postprocess_params['plot DTM moving average']:    
+        XS_co_sums_XB_df.rolling(window=postprocess_params['rolling window size'], center=True).mean().plot(color=postprocess_params['rolling color'], linestyle='--',lw=3, ax=ax) 
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
     plt.ylim(XS_co_sums_XB_df.min().min(),XS_co_sums_XB_df.max().max())
     plt.ylabel('Delta to along-berm median')

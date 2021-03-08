@@ -13,13 +13,13 @@ from coastsat import SDS_download
 import pandas as pd
 import glob
 import pickle
-from datetime import datetime
 
 # filepath where data will be stored
 filepath_data = os.path.join(os.getcwd(), 'data') #user input required | change this path to the location where you want to store the data (can be outside of ../Entrencesat)
+filepath_data = os.path.join('H:/WRL_Projects/Estuary_sat_data/', 'data')
 
 #sitename as specified in the input input_locations.shp
-sitename = 'DURRAS' #user input required
+sitename = 'WILDERNESSBREACH' #user input required
 site_shapefile_name = 'input_locations.shp' #user input required | change this if a new shapefile was created with the site configurations
 
 #this parameter is used to distinguish progressive 'sets' of analysis that may be based on different seed and receiver point configurations
@@ -30,7 +30,7 @@ Analysis_version = 'V1'   #user input required
 dates = ['1985-01-01', '2021-12-01']   #user input required
 
 # satellite missions
-sat_list = ['L5','L7','L8','S2'] #user input required
+sat_list = ['L5','L8','S2'] #user input required
 
 #load shapefile that contains specific shapes for each ICOLL site as per readme file
 Site_shps, layers, BBX_coords = InletTracker_tools.load_shapes(site_shapefile_name, sitename)
@@ -47,7 +47,7 @@ inputs = {
         }
 
 # retrieve satellite images from GEE (run only once!)
-metadata = SDS_download.retrieve_images(inputs) #user input required (hash this line only if you have already downloaded the data)
+#metadata = SDS_download.retrieve_images(inputs) #user input required (hash this line only if you have already downloaded the data)
 
 # if you have already downloaded the images, just load the metadata file
 metadata = SDS_download.get_metadata(inputs) 
@@ -55,7 +55,7 @@ metadata = SDS_download.get_metadata(inputs)
 # general settings
 settings = { 
     # general parameters:
-    'cloud_thresh': 0.1,        # threshold on maximum cloud cover
+    'cloud_thresh': 0.01,        # threshold on maximum cloud cover
     'output_epsg': 3577,       # epsg code of spatial reference system desired for the spatial output files
     'shapefile_EPSG' : 4326,     #epsg of shapefile containing sites and path finding seed and receiver points
     'use_fes_data': False,      # if the FES model was installed sucessfully, choose whether to include it in the analysis (True) or not (False). 
@@ -88,7 +88,7 @@ settings_training =  { # set parameters for training data generation
                       }
 
 # only rerun this step if you have not already generated a set of training data (i.e., only run once)
-Training_data_df = InletTracker_tools.create_training_data(metadata, settings, settings_training)
+#Training_data_df = InletTracker_tools.create_training_data(metadata, settings, settings_training)
 
  
 
@@ -172,7 +172,7 @@ settings_inlet =  {
     }
 
 # run this function only if the current path finding settings haven't been processed yet (i.e., run only once for each spectral index)
-InletTracker_tools.automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tides_df)
+#InletTracker_tools.automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tides_df)
 
 
 
@@ -200,8 +200,8 @@ postprocess_params = {
     'Postprocessing_version' : 'V1',           #this is a unique identifier used to distinguish different postprocessing versions (e.g. based on different spectral index)
     'spectral_index' : 'mndwi',                 #band/index used for inferring inlet states via delta-to-median parameter: options are ndwi, nir, swir or mndwi
     'metric_percentile' : 0.5 ,                 #which percentile to use for 'delta to median' parameter. Typically recommended to be 0.5, which is the median.  
-    'AB_intersection_search_distance' : 100,    #window on either side of the AB intersection to limit the calculation of the area under the Xth percentile | should be bit bigger than the max width of the inlet
-    'XB_intersection_search_distance' : 100,    #window on either side of the XB intersection to locate maximum (m)NDWI in the area of the channel bottleneck.
+    'AB_intersection_search_distance' : 200,    #window on either side of the AB intersection to limit the calculation of the area under the Xth percentile | should be bit bigger than the max width of the inlet
+    'XB_intersection_search_distance' : 200,    #window on either side of the XB intersection to locate maximum (m)NDWI in the area of the channel bottleneck.
     'sat_list_pp' :  ['L5','L7','L8','S2'],      #these satellites are included in postprocessing.
     'startdate' :  '1985-01-01',
     'enddate' : '2022-01-01',
@@ -216,7 +216,10 @@ postprocess_params = {
     'linestyle' : ['-', '--', '-.'],
     'labelsize' : 18,
     'linewidth' : 2 ,
-    'markersize': 5   #size of blue and orange dots indicating open vs. closed inlet states in delta-to-median time series
+    'markersize': 5,   #size of blue and orange dots indicating open vs. closed inlet states in delta-to-median time series
+    'plot DTM moving average': False,
+    'rolling window size': 3,
+    'rolling color' : 'grey',
     }
 
 
@@ -275,7 +278,7 @@ print(Validation_stats_df)
 print('')
 
 #set the thresholds for along and across-berm classification into binary inlet states
-analysis_direction =  'AB' #AB for along-berm, XB for across berm. Choose the analysis direction that lead to the highes Fscore and Accuracy above. 
+analysis_direction =  'XB' #AB for along-berm, XB for across berm. Choose the analysis direction that lead to the highes Fscore and Accuracy above. 
 
 #use optimal threshold inferred from user validation data - the parameter is DTM_threshold
 if analysis_direction == 'XB':
@@ -284,7 +287,7 @@ else:
     DTM_threshold =  Validation_stats_df['Opt_threshold'][1] #if along-berm classification stats were better 
 
 #Alternatively, use a user-defined fixed threshold via overriding of the DTM_threshold parameter established above. 
-#DTM_threshold =  0.1
+DTM_threshold =  0.2
 
 #classify the full image series based on the best performing analysis direction and corresponding threshold
 XS_DTM_classified_df = InletTracker_tools.classify_image_series_via_DTM(XS_df, analysis_direction, DTM_threshold, postprocess_params)
@@ -304,7 +307,11 @@ XS_DTM_classified_df = InletTracker_tools.subset_DTM_df_in_time(XS_DTM_classifie
 
 #run the 'check detection' function and create a clean XS_DTM_classified_df
 #XS_DTM_classified_df = InletTracker_tools.check_inlet_state_detection(postprocess_out_path, XS_DTM_classified_df)
-    
+
+#write out the detection checked DTM classified dataframe to csv
+#XS_DTM_classified_df.to_csv(os.path.join(figure_out_path, settings['inputs']['sitename'] + '_checked_detection_clssfd_df_' + postprocess_params['spectral_index'] + '.csv'))
+              
+            
     
     
 #%% ######################
@@ -314,26 +321,10 @@ XS_DTM_classified_df = InletTracker_tools.subset_DTM_df_in_time(XS_DTM_classifie
 #Create dataframes and geodataframes corresponding to the open and closed classified inlet states. 
 #These are used for creating the standart plots but can serve as the basis for any additional user-specific analysis
 
-XS_o_df = pd.DataFrame()       #dataframe containing transect data for all 'open' inlet states
-XS_o_gdf = pd.DataFrame()      #geodataframe containing trasects for all 'open' inlet states
-for date in XS_DTM_classified_df[XS_DTM_classified_df['bin_inlet_state'] == 1].index:
-    XS_o_df = pd.concat([XS_o_df, pd.DataFrame(XS_df.filter(regex=date))], axis = 1)
-    XS_o_gdf = pd.concat([XS_o_gdf, XS_gdf[XS_gdf['date'] == date]], axis = 0)
 
-#write open across-berm transects out as shapefile for visualization
-XS_o_gdf[XS_o_gdf['direction']=='XB'].to_file(figure_out_path  + '/open_inlet_along_berm_paths.shp', driver='ESRI Shapefile')     
-
-XS_c_df = pd.DataFrame()        #dataframe containing transect data for all 'open' inlet states
-XS_c_gdf = pd.DataFrame()       #geodataframe containing transects for all 'open' inlet states
-for date in XS_DTM_classified_df[XS_DTM_classified_df['bin_inlet_state'] == 0].index:
-    XS_c_df = pd.concat([XS_c_df, pd.DataFrame(XS_df.filter(regex=date))], axis = 1)
-    XS_c_gdf = pd.concat([XS_c_gdf, XS_gdf[XS_gdf['date'] == date]], axis = 0)
-
+#from inlettracker import  InletTracker_tools 
 #plot result figures and save processed data as csv
-InletTracker_tools.plot_inlettracker_results(XS_o_df, XS_c_df,XS_o_gdf, XS_c_gdf, settings, postprocess_params, analysis_direction, metadata,  figure_out_path)
-
-
-
+InletTracker_tools.plot_inlettracker_resultsV2(XS_df, XS_gdf, XS_DTM_classified_df, settings, postprocess_params, analysis_direction, metadata,  figure_out_path)  
 
 
 
