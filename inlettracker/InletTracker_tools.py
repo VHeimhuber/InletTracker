@@ -1628,20 +1628,22 @@ def classify_image_series_via_DTM(XS_df, analysis_direction, DTM_threshold, post
 
 
 
-def subset_DTM_df_in_time(Input_df, postprocess_params):
+def subset_DTM_df_in_time(Input_df, startdate, enddate):
     """
     VH UNSW 2021
       
     this function subsets the input dataframe to within the start and end date 
     
     """
+    Input_df  = Input_df.copy()
+    
     newindex = []
     for index in Input_df.index:
         newindex.append(pd.to_datetime(index[:19], format = '%Y-%m-%d-%H-%M-%S'))
     Input_df.index = newindex
     
     #subset the dataframe for a specific period of interest
-    Input_df  = Input_df[postprocess_params['startdate']:postprocess_params['enddate']]
+    Input_df  = Input_df[startdate:enddate]
     
     newindex = []
     for index in Input_df .index:
@@ -2103,7 +2105,7 @@ def plot_inlettracker_resultsV2(XS_df, XS_gdf, XS_DTM_classified_df, settings, p
     if postprocess_params['plot DTM moving average']:
         XS_co_sums_AB_df.rolling(window=postprocess_params['rolling window size'], center=True).mean().plot(color=postprocess_params['rolling color'], linestyle='--',lw=3, ax=ax)
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
-    plt.ylim(XS_co_sums_AB_df.min().min(),XS_co_sums_AB_df.max().max())
+    plt.ylim(XS_co_sums_AB_df.min().min()-0.1,XS_co_sums_AB_df.max().max()+0.1)
     plt.ylabel('Delta to along-berm median')
     ax.get_legend().remove()  
     
@@ -2116,7 +2118,7 @@ def plot_inlettracker_resultsV2(XS_df, XS_gdf, XS_DTM_classified_df, settings, p
     if postprocess_params['plot DTM moving average']:    
         XS_co_sums_XB_df.rolling(window=postprocess_params['rolling window size'], center=True).mean().plot(color=postprocess_params['rolling color'], linestyle='--',lw=3, ax=ax) 
     plt.axhline(y=0, xmin=-1, xmax=1, color='grey', linestyle='--', lw=1, alpha=0.5) 
-    plt.ylim(XS_co_sums_XB_df.min().min(),XS_co_sums_XB_df.max().max())
+    plt.ylim(XS_co_sums_XB_df.min().min()-0.1,XS_co_sums_XB_df.max().max()+0.1)
     plt.ylabel('Delta to along-berm median')
     ax.get_legend().remove()  
          

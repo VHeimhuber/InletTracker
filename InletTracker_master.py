@@ -16,10 +16,9 @@ import pickle
 
 # filepath where data will be stored
 filepath_data = os.path.join(os.getcwd(), 'data') #user input required | change this path to the location where you want to store the data (can be outside of ../Entrencesat)
-filepath_data = os.path.join('H:/WRL_Projects/Estuary_sat_data/', 'data')
 
 #sitename as specified in the input input_locations.shp
-sitename = 'WILDERNESSBREACH' #user input required
+sitename = 'DURRAS' #user input required
 site_shapefile_name = 'input_locations.shp' #user input required | change this if a new shapefile was created with the site configurations
 
 #this parameter is used to distinguish progressive 'sets' of analysis that may be based on different seed and receiver point configurations
@@ -30,7 +29,7 @@ Analysis_version = 'V1'   #user input required
 dates = ['1985-01-01', '2021-12-01']   #user input required
 
 # satellite missions
-sat_list = ['L5','L8','S2'] #user input required
+sat_list = ['L5','L7','L8','S2'] #user input required
 
 #load shapefile that contains specific shapes for each ICOLL site as per readme file
 Site_shps, layers, BBX_coords = InletTracker_tools.load_shapes(site_shapefile_name, sitename)
@@ -84,11 +83,11 @@ It is recommended to:
 settings_training =  { # set parameters for training data generation
                     'shuffle_training_imgs':True,   # if True, images during manual/visual detection of inlet states are shuffled (in time) to provide a more independent sample
                     'save_figure': True,        # if True, saves a figure for each trained image     
-                    'username' : 'InletTracker_1', # in case multiple analysts create training data or one analyst creating multiple training datasets, this can be used as a distinguishing variable.
+                    'username' : 'InletTracker', # in case multiple analysts create training data or one analyst creating multiple training datasets, this can be used as a distinguishing variable.
                       }
 
 # only rerun this step if you have not already generated a set of training data (i.e., only run once)
-#Training_data_df = InletTracker_tools.create_training_data(metadata, settings, settings_training)
+Training_data_df = InletTracker_tools.create_training_data(metadata, settings, settings_training)
 
  
 
@@ -135,8 +134,7 @@ settings_inlet =  {
     'use_berm_mask_for_AB' : True,         #use a separate mask for along berm path finding - recommended if there is vegetation around the inlet
     'number_of_images':2000,               #nr of images to process - if it exceeds len(images) all images will be processed. Applied to each satellite so 5 -> 20 images processed
     'XB_use_straight_line': False,             # insead of path finding, simply use a straightline for across berm (A to B), which might be useful for application not concerned with coastal inlets   
-    'AB_use_straight_line': False,             # insead of path finding, simply use a straightline for along berm (C to D), which might be useful for application not concerned with coastal inlets   
-     
+    'AB_use_straight_line': False,             # insead of path finding, simply use a straightline for along berm (C to D), which might be useful for application not concerned with coastal inlets    
             
     #processing troubleshooting
     #sometimes specific images may cause the code to crash. If that image nr is included here it will be skipped when you rerun the algorithm 
@@ -172,7 +170,7 @@ settings_inlet =  {
     }
 
 # run this function only if the current path finding settings haven't been processed yet (i.e., run only once for each spectral index)
-#InletTracker_tools.automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tides_df)
+InletTracker_tools.automated_inlet_paths(metadata, settings, settings_inlet, tides_df , sat_tides_df)
 
 
 
@@ -210,16 +208,16 @@ postprocess_params = {
     'closed_color' : 'orangered',           #color used for plotting closed inlet states
     'open_color' : 'royalblue',             #color used for plotting open inlet states
     'xaxisadjust' : 0,                      
-    'sat_list_Fig1' : ['L8'], #plot the spatial transects for these satellites in Figure 1 (plotting all satellites usually leads to an overloaded figure)
-    'sat_list_Fig2' : ['L8'], #plot spectral transects for these satellites in Figure 2 (plotting all satellites usually leads to an overloaded figure)
+    'sat_list_Fig1' : ['L5','L8'], #plot the spatial transects for these satellites in Figure 1 (plotting all satellites usually leads to an overloaded figure)
+    'sat_list_Fig2' : ['L5','L8'], #plot spectral transects for these satellites in Figure 2 (plotting all satellites usually leads to an overloaded figure)
     'Interpolation_method' : "bicubic", # interpolate the RGB images for illustration - choose between "None" #"bicubic"
     'linestyle' : ['-', '--', '-.'],
     'labelsize' : 18,
     'linewidth' : 2 ,
     'markersize': 5,   #size of blue and orange dots indicating open vs. closed inlet states in delta-to-median time series
-    'plot DTM moving average': False,
-    'rolling window size': 3,
-    'rolling color' : 'grey',
+    'plot DTM moving average': False, # plot a moving average of the DTM parameter time series on top of Figure 3
+    'rolling window size': 3,           #size of window for moving average
+    'rolling color' : 'grey',           #color of moving average line plot
     }
 
 
@@ -287,13 +285,14 @@ else:
     DTM_threshold =  Validation_stats_df['Opt_threshold'][1] #if along-berm classification stats were better 
 
 #Alternatively, use a user-defined fixed threshold via overriding of the DTM_threshold parameter established above. 
-DTM_threshold =  0.2
+#DTM_threshold =  0.12
 
 #classify the full image series based on the best performing analysis direction and corresponding threshold
 XS_DTM_classified_df = InletTracker_tools.classify_image_series_via_DTM(XS_df, analysis_direction, DTM_threshold, postprocess_params)
 
-#subset the dataframe for a specific period of interest as specified in postprocess_params
-XS_DTM_classified_df = InletTracker_tools.subset_DTM_df_in_time(XS_DTM_classified_df, postprocess_params)
+
+#subset the dataframe for a specific period of interest as specified in postprocess_params if desired for plotting
+XS_DTM_classified_df = InletTracker_tools.subset_DTM_df_in_time(XS_DTM_classified_df, postprocess_params['startdate'], postprocess_params['enddate'])
 
 
 #%% ######################
@@ -312,20 +311,13 @@ XS_DTM_classified_df = InletTracker_tools.subset_DTM_df_in_time(XS_DTM_classifie
 #XS_DTM_classified_df.to_csv(os.path.join(figure_out_path, settings['inputs']['sitename'] + '_checked_detection_clssfd_df_' + postprocess_params['spectral_index'] + '.csv'))
               
             
-    
-    
+       
 #%% ######################
 #5.4 Divide the original data into open and closed inlet states and plot result figures
 ########################## 
 
-#Create dataframes and geodataframes corresponding to the open and closed classified inlet states. 
-#These are used for creating the standart plots but can serve as the basis for any additional user-specific analysis
-
-
-#from inlettracker import  InletTracker_tools 
 #plot result figures and save processed data as csv
 InletTracker_tools.plot_inlettracker_resultsV2(XS_df, XS_gdf, XS_DTM_classified_df, settings, postprocess_params, analysis_direction, metadata,  figure_out_path)  
-
 
 
 
