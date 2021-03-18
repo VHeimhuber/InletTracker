@@ -7,10 +7,10 @@ Valentin Heimhuber, University of New South Wales, Water Research Laboratory, 02
 
 InletTracker is a Google Earth Engine enabled open source python software package that first uses a novel least cost path finding approach to trace inlet channels along and across the berm (i.e., barrier, bar), and then analyses the resulting spectral transects to infer whether an inlet is open or closed. InletTracker is built on top of the imagery download and pre-processing functionality of the CoastSat toolbox [https://github.com/kvos/CoastSat].
 
-![Alt text](readme_files/InletTracker python tool for monitoring coastal inlets from Landsat and Sentinel-2.png)
+![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker python tool for monitoring coastal inlets from Landsat and Sentinel-2.png)
 
 Here's a little demo of InletTracker in action:
-![Alt text](readme_files/InletTracker animation of results for Durras Lake.gif)
+![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker animation of results for Durras Lake.gif)
 
 The underlying approach of the InletTracker toolkit and it's performance is described in detail in the following journal paper, which is currently under review (preprint available here: https://doi.org/10.1002/essoar.10506493.1):
 
