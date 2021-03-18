@@ -7,10 +7,10 @@ Valentin Heimhuber, University of New South Wales, Water Research Laboratory, 02
 
 InletTracker is a Google Earth Engine enabled open source python software package that first uses a novel least cost path finding approach to trace inlet channels along and across the berm (i.e., barrier, bar), and then analyses the resulting spectral transects to infer whether an inlet is open or closed. InletTracker is built on top of the imagery download and pre-processing functionality of the CoastSat toolbox [https://github.com/kvos/CoastSat].
 
-![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker python tool for monitoring coastal inlets from Landsat and Sentinel-2.png)
+![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker%20python%20tool%20for%20monitoring%20coastal%20inlets%20from%20Landsat%20and%20Sentinel-2.png)
 
 Here's a little demo of InletTracker in action:
-![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker animation of results for Durras Lake.gif)
+![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker%20animation%20of%20results%20for%20Durras%20Lake.gif)
 
 The underlying approach of the InletTracker toolkit and it's performance is described in detail in the following journal paper, which is currently under review (preprint available here: https://doi.org/10.1002/essoar.10506493.1):
 
@@ -108,7 +108,7 @@ All user input files (area of interest polygon, transects & tide data) are kept 
 
 It is recommended that new analysis regions/ inlets are added directly to the input_locations.shp file located in this directory via QGIS or ArcGIS. For each site, InletTracker expects 7 polygons as shown in this example. In the attribute table of this shapefile, each of these 7 unique polygons has to be named accordingly in the 'layer' field ('full_bounding_box', 'A-B Mask', 'C-D Mask', 'B', 'A', 'D', 'C'). Note that the 'estuary_area' polygon is not required at this stage. Each polygon also requires the sitename in the 'sitename' field.
 
-![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker pathfinding site setup illustration.jpg)
+![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker%20pathfinding%20site%20setup%20illustration.jpg)
 
 The full_bounding_box polygon is used for selecting and cropping of the satellite imagery from the Google Earth Engine. This does not necessarily have to incorporate the entire estuary water body. The area of this polygon should not exceed 100 km2. It is recommended you leave at least 100m of buffer space between your A-D points/masks and the full_bounding_box polygon.
 
@@ -145,7 +145,7 @@ Use 'skip' if the image is cloudy or otherwise of poor quality. User 'unclear' i
 
 Not that instead of using training data, users can choose to specify a specific classification threshold later on manually. In this case, a couple of open and closed training inputs are still be required for the code to run properly but the data will not be used.
 
-![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker training data generator user interface.png)
+![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker%20training%20data%20generator%20user%20interface.png)
 
 #### Step 3: Load tide data (optional)
 Generate tide time series (if use_fes_data is set to True in 'settings' dict). In this step, InletTracker uses the location of seed point A to query into the FES2014 tide data and extract tide water levels for the entire analysis period. Two pandas dataframes are created from this data. sat_tides_df contains the tide level for each image along with the name of the image. tides_df contains a 15min timestep tide time series for the full analysis period.  
