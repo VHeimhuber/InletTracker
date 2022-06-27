@@ -12,9 +12,9 @@ InletTracker is a Google Earth Engine enabled open source python software packag
 Here's a little demo of InletTracker in action:
 ![Alt text](https://github.com/VHeimhuber/InletTracker/blob/main/readme_files/InletTracker%20animation%20of%20results%20for%20Durras%20Lake.gif)
 
-The underlying approach of the InletTracker toolkit and it's performance is described in detail in the following journal paper, which is currently under review (preprint available here: https://doi.org/10.1002/essoar.10506493.1):
+The underlying approach of the InletTracker toolkit and it's performance is described in detail in the following journal paper:
 
-Valentin Heimhuber, Kilian Vos, Wanru Fu, William Glamore (submitted to Remote Sensing of Environment). InletTracker: A Google Earth Engine enabled open-source python tool for historic and near real-time monitoring of intermittent estuary entrances, 2021
+Heimhuber, V., Vos, K., Fu, W., Glamore, W., 2021. InletTracker : An open-source Python toolkit for historic and near real-time monitoring of coastal inlets from Landsat and Sentinel-2. Geomorphology 389, 107830. https://doi.org/10.1016/j.geomorph.2021.107830
 
 Output files of InletTracker include:
 - Time series of along-berm and across-berm paths as .shp file for use in GIS software (no tidal correction)
